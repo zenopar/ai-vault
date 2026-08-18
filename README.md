@@ -170,7 +170,7 @@ AAD = "vault_id:" + vault_id + "|type:" + record_type + "|id:" + record_id + "|f
 ## Recommended Tech Stack Implementation
 - **Frontend / API**: Next.js (App Router, Server Actions with strict CSRF/Session validation per mutation).
 - **Vault Service**: Node.js microservice utilizing a verified Argon2id package and native `crypto` module (AES-GCM, HKDF).
-- **Database**: PostgreSQL with Prisma ORM.
+- **Database**: PostgreSQL with Prisma ORM (Exclusively accessed and managed by the Vault Service; Next.js has zero database credentials).
 - **AI Integration**: Vercel AI SDK.
 
 ---
