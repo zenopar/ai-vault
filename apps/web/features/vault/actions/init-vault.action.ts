@@ -11,7 +11,9 @@ export type InitVaultActionResult = {
   error?: string;
 };
 
-export async function initVaultAction(masterPassword: string): Promise<InitVaultActionResult> {
+export async function initVaultAction(formData: FormData): Promise<InitVaultActionResult> {
+  const masterPassword = formData.get("masterPassword")?.toString() || "";
+  
   const ip = await getClientIp();
   if (!checkRateLimit(ip, 5, 15 * 60 * 1000)) {
     return { success: false, error: "Too many attempts. Please try again in 15 minutes." };
@@ -28,8 +30,6 @@ export async function initVaultAction(masterPassword: string): Promise<InitVault
 
   try {
     const recoveryPassword = await initVaultService(masterPassword);
-
-    revalidatePath("/");
 
     return { success: true, recoveryPassword };
   } catch (error: unknown) {
