@@ -32,7 +32,8 @@ export async function initVaultAction(masterPassword: string): Promise<InitVault
     revalidatePath("/");
 
     return { success: true, recoveryPassword };
-  } catch (error: any) {
-    return { success: false, error: error.message || "An unexpected error occurred." };
+  } catch (error: unknown) {
+    console.error("[initVaultAction] Critical error:", error);
+    return { success: false, error: "An unexpected error occurred during initialization." };
   }
 }
