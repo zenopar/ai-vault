@@ -1,7 +1,7 @@
 import { getVaultConfig } from "../db/repository/vault.repository.js";
 import { vaultState } from "./state.js";
 
-export type VaultOverallStatus = "UNINITIALIZED" | "LOCKED" | "UNLOCKED";
+import { VaultOverallStatus } from "@ai-vault/types";
 
 export interface VaultKdfParams {
   algorithm: string;

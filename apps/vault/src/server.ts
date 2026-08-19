@@ -1,8 +1,9 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { config } from "./config.js";
 import { getVaultStatus } from "./vault/status.js";
+import { VaultStatusResponse } from "@ai-vault/types";
 
-function sendJson(res: ServerResponse, statusCode: number, data: unknown) {
+function sendJson<T = unknown>(res: ServerResponse, statusCode: number, data: T) {
   const json = JSON.stringify(data);
   res.writeHead(statusCode, {
     "Content-Type": "application/json",
@@ -50,7 +51,7 @@ export function createVaultHttpServer() {
       // 2. Vault status endpoint (Protected)
       if (method === "GET" && pathname === "/status") {
         const status = await getVaultStatus();
-        sendJson(res, 200, status);
+        sendJson<VaultStatusResponse>(res, 200, status);
         return;
       }
 

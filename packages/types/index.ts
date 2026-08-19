@@ -1,0 +1,8 @@
+export type VaultOverallStatus = "UNINITIALIZED" | "LOCKED" | "UNLOCKED";
+
+export interface VaultStatusResponse {
+  status: VaultOverallStatus;
+  isUnlocked: boolean;
+  version?: number;
+  error?: string;
+}
