@@ -4,5 +4,13 @@
   "private": true,
   "workspaces": [
     "apps/*"
-  ]
+  ],
+  "scripts": {
+    "dev:vault": "npm run dev --workspace=@ai-vault/vault",
+    "dev:web": "npm run dev --workspace=ai-vault",
+    "test": "npm run test --workspace=@ai-vault/vault",
+    "db:generate": "npm run db:generate --workspace=@ai-vault/vault",
+    "db:migrate": "npm run db:migrate --workspace=@ai-vault/vault",
+    "db:studio": "npm run db:studio --workspace=@ai-vault/vault"
+  }
 }
