@@ -3,6 +3,8 @@
 import { VaultApiClient } from "@/shared/lib/vault-client";
 import { VaultInitResponse } from "@ai-vault/types";
 import { revalidatePath } from "next/cache";
+import { checkRateLimit } from "@/shared/lib/rate-limit";
+import { getClientIp } from "@/shared/lib/get-ip";
 
 export type InitVaultActionResult = {
   success: boolean;
@@ -11,6 +13,16 @@ export type InitVaultActionResult = {
 };
 
 export async function initVaultAction(masterPassword: string): Promise<InitVaultActionResult> {
+  // 0. Strict Rate Limiting (5 requests per 15 minutes)
+  const ip = await getClientIp();
+  
+  if (!checkRateLimit(ip, 5, 15 * 60 * 1000)) {
+    return {
+      success: false,
+      error: "Too many attempts. Please try again in 15 minutes.",
+    };
+  }
+
   // 1. Strict password validation
   const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{16,}$/;
   if (!masterPassword || !passwordRegex.test(masterPassword)) {
