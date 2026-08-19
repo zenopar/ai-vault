@@ -6,3 +6,9 @@ export interface VaultStatusResponse {
   version?: number;
   error?: string;
 }
+
+export interface VaultInitResponse {
+  success: boolean;
+  recoveryPassword?: string;
+  error?: string;
+}
