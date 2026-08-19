@@ -1,4 +1,4 @@
-import { getPrismaClient } from "../db/client.js";
+import { getVaultConfig } from "../db/repository/vault.repository.js";
 import { vaultState } from "./state.js";
 
 export type VaultOverallStatus = "UNINITIALIZED" | "LOCKED" | "UNLOCKED";
@@ -26,10 +26,8 @@ export interface VaultStatusResult {
  * Checks the database and in-memory runtime to determine current vault status.
  */
 export async function getVaultStatus(): Promise<VaultStatusResult> {
-  const prisma = getPrismaClient();
-
   try {
-    const config = await prisma.vault_config.findFirst();
+    const config = await getVaultConfig();
 
     // If no vault_config row is present in the database, the vault is uninitialized
     if (!config) {
