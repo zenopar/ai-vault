@@ -1,7 +1,39 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import crypto from "node:crypto";
 import { config } from "./config.js";
 import { getVaultStatus } from "./vault/status.js";
-import { VaultStatusResponse } from "@ai-vault/types";
+import { VaultStatusResponse, VaultInitResponse } from "@ai-vault/types";
+import { createVaultConfig } from "./db/repository/vault.repository.js";
+import { generateRandomSalt, generateVaultKey, generateRecoveryPassword, deriveKey, encryptBuffer, DEFAULT_KDF_PARAMS } from "./vault/crypto.js";
+import { vaultState } from "./vault/state.js";
+
+function readJsonBody(req: IncomingMessage): Promise<any> {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    let size = 0;
+    const MAX_SIZE = 1024 * 1024; // 1 MB limit
+
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > MAX_SIZE) {
+        req.destroy();
+        reject(new Error("Payload too large"));
+        return;
+      }
+      body += chunk.toString();
+    });
+    
+    req.on("end", () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch (e) {
+        reject(new Error("Invalid JSON"));
+      }
+    });
+    
+    req.on("error", reject);
+  });
+}
 
 function sendJson<T = unknown>(res: ServerResponse, statusCode: number, data: T) {
   const json = JSON.stringify(data);
@@ -43,7 +75,18 @@ export function createVaultHttpServer() {
       // All routes below this point require the correct IPC Secret
       // ==========================================
       const clientSecret = req.headers["x-vault-secret"] || req.headers["authorization"]?.replace("Bearer ", "");
-      if (!config.ipcSecret || clientSecret !== config.ipcSecret) {
+      const expectedSecret = config.ipcSecret || "";
+      const actualSecret = typeof clientSecret === "string" ? clientSecret : "";
+      
+      const expectedBuffer = Buffer.from(expectedSecret);
+      const actualBuffer = Buffer.from(actualSecret);
+      
+      // Timing-safe comparison requires equal length buffers
+      if (
+        !expectedSecret || 
+        expectedBuffer.length !== actualBuffer.length || 
+        !crypto.timingSafeEqual(expectedBuffer, actualBuffer)
+      ) {
         sendJson(res, 401, { error: "Unauthorized: Invalid or missing IPC Secret" });
         return;
       }
@@ -52,6 +95,66 @@ export function createVaultHttpServer() {
       if (method === "GET" && pathname === "/status") {
         const status = await getVaultStatus();
         sendJson<VaultStatusResponse>(res, 200, status);
+        return;
+      }
+
+      // 3. Vault initialization endpoint (Protected)
+      if (method === "POST" && pathname === "/init") {
+        const currentStatus = await getVaultStatus();
+        if (currentStatus.status !== "UNINITIALIZED") {
+          sendJson(res, 400, { error: "Vault is already initialized." });
+          return;
+        }
+
+        const body = await readJsonBody(req);
+        if (!body.masterPassword || typeof body.masterPassword !== "string") {
+          sendJson(res, 400, { error: "masterPassword is required and must be a string." });
+          return;
+        }
+
+        const masterPassword = body.masterPassword;
+
+        // Generate salts
+        const kdfSalt = generateRandomSalt();
+        const recoverySalt = generateRandomSalt();
+
+        // Generate Master Vault Key (this is the true key that encrypts data)
+        const vaultKey = generateVaultKey();
+
+        // Generate Recovery Password for the user
+        const recoveryPassword = generateRecoveryPassword();
+
+        // Derive Wrapping Keys using Argon2
+        const wrappingKey = await deriveKey(masterPassword, kdfSalt, DEFAULT_KDF_PARAMS);
+        const recoveryWrappingKey = await deriveKey(recoveryPassword, recoverySalt, DEFAULT_KDF_PARAMS);
+
+        // Encrypt the Vault Key
+        const wrappedVaultKey = encryptBuffer(vaultKey, wrappingKey);
+        const wrappedRecoveryKey = encryptBuffer(vaultKey, recoveryWrappingKey);
+
+        // Save everything to DB
+        await createVaultConfig({
+          kdf_algorithm: "argon2id",
+          kdf_memory_cost: DEFAULT_KDF_PARAMS.memoryCost,
+          kdf_time_cost: DEFAULT_KDF_PARAMS.timeCost,
+          kdf_parallelism: DEFAULT_KDF_PARAMS.parallelism,
+          kdf_salt: kdfSalt,
+          wrapped_vault_key: wrappedVaultKey.ciphertext,
+          wrapped_vault_key_iv: wrappedVaultKey.iv,
+          wrapped_vault_key_tag: wrappedVaultKey.tag,
+          recovery_kdf_salt: recoverySalt,
+          wrapped_vault_key_recovery: wrappedRecoveryKey.ciphertext,
+          wrapped_vault_key_recovery_iv: wrappedRecoveryKey.iv,
+          wrapped_vault_key_recovery_tag: wrappedRecoveryKey.tag,
+        });
+
+        // Load into RAM immediately
+        vaultState.setUnlocked(vaultKey);
+
+        sendJson<VaultInitResponse>(res, 200, {
+          success: true,
+          recoveryPassword,
+        });
         return;
       }
 
