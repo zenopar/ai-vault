@@ -20,11 +20,30 @@ export interface VaultUnlockResponse {
   sessionToken?: string;
 }
 
+export interface AiModelMetadata {
+  id: string;
+  provider: string;
+  name: string;
+  displayName: string;
+  description?: string | null;
+  contextWindow?: number | null;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ListModelsResponse {
+  success: boolean;
+  models?: AiModelMetadata[];
+  error?: string;
+}
+
 export interface AiApiKeyMetadata {
   id: string;
   provider: string;
   name: string;
   isActive: boolean;
+  models?: AiModelMetadata[];
   createdAt: string;
   updatedAt: string;
 }
@@ -46,3 +65,4 @@ export interface ListApiKeysResponse {
   keys?: AiApiKeyMetadata[];
   error?: string;
 }
+

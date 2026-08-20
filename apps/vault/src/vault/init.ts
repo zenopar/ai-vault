@@ -1,11 +1,11 @@
 import { getVaultStatus } from "./status.js";
 import { createVaultConfig } from "../db/repository/vault.repository.js";
-import { 
-  generateRandomSalt, 
-  generateVaultKey, 
-  generateRecoveryPassword, 
-  deriveKey, 
-  encryptBuffer, 
+import {
+  generateRandomSalt,
+  generateVaultKey,
+  generateRecoveryPassword,
+  deriveKey,
+  encryptBuffer,
   DEFAULT_KDF_PARAMS,
   AAD_WRAPPED_VAULT_KEY_MASTER,
   AAD_WRAPPED_VAULT_KEY_RECOVERY

@@ -10,6 +10,8 @@ import {
 } from "../db/repository/keys.repository.js";
 import { AiApiKeyMetadata } from "@ai-vault/types";
 
+import { listModels } from "./models.js";
+
 export class VaultLockedError extends Error {
   constructor(message = "Vault is locked. Unlock the vault first.") {
     super(message);
@@ -66,30 +68,37 @@ export async function addApiKey(params: {
 
   vaultState.touch();
 
+  const models = await listModels(record.provider);
+
   return {
     id: record.id,
     provider: record.provider,
     name: record.name,
     isActive: record.is_active,
+    models,
     createdAt: record.created_at.toISOString(),
     updatedAt: record.updated_at.toISOString(),
   };
 }
 
 /**
- * Lists all stored AI API keys metadata (without exposing ciphertext).
+ * Lists all stored AI API keys metadata (without exposing ciphertext) along with associated models.
  */
 export async function listApiKeys(): Promise<AiApiKeyMetadata[]> {
   const records = await getAllApiKeys();
+  const allModels = await listModels();
+
   return records.map((r: ApiKeyRecord) => ({
     id: r.id,
     provider: r.provider,
     name: r.name,
     isActive: r.is_active,
+    models: allModels.filter((m) => m.provider.toLowerCase() === r.provider.toLowerCase()),
     createdAt: r.created_at.toISOString(),
     updatedAt: r.updated_at.toISOString(),
   }));
 }
+
 
 /**
  * Decrypts an AI API key using the in-memory HKDF secrets key and verifies AAD integrity.

@@ -141,21 +141,48 @@ export function KeysManager({ initialKeys }: KeysManagerProps) {
         {keys.length === 0 ? (
           <p className="text-gray-500 text-sm">No API keys saved yet.</p>
         ) : (
-          <div className="divide-y divide-gray-200">
+          <div className="divide-y divide-gray-100">
             {keys.map((k) => (
-              <div key={k.id} className="py-3 flex items-center justify-between gap-4">
-                <div>
-                  <div className="font-medium text-gray-900 text-sm">{k.name}</div>
-                  <div className="text-xs text-gray-500 uppercase">{k.provider} • ID: {k.id.slice(0, 8)}...</div>
+              <div key={k.id} className="py-4 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                <div className="space-y-1.5 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-gray-900 text-base">{k.name}</span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 uppercase tracking-wider">
+                      {k.provider}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-400 font-mono">
+                    ID: {k.id.slice(0, 8)}... • Created {new Date(k.createdAt).toLocaleDateString()}
+                  </div>
+
+                  {k.models && k.models.length > 0 && (
+                    <div className="pt-2">
+                      <div className="text-xs font-medium text-gray-500 mb-1.5">Supported Models:</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {k.models.map((model) => (
+                          <span
+                            key={model.id}
+                            title={model.description || model.displayName}
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-mono bg-blue-50 text-blue-700 border border-blue-100"
+                          >
+                            {model.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteKey(k.id, k.name)}
-                  disabled={isPending}
-                  className="text-xs text-red-600 hover:text-red-800 font-medium px-2 py-1 rounded hover:bg-red-50 transition"
-                >
-                  Delete
-                </button>
+
+                <div className="self-end sm:self-start pt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteKey(k.id, k.name)}
+                    disabled={isPending}
+                    className="text-xs text-red-600 hover:text-red-800 font-medium px-2.5 py-1.5 rounded border border-transparent hover:border-red-100 hover:bg-red-50 transition-colors"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             ))}
           </div>

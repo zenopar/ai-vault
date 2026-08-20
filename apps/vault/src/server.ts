@@ -11,14 +11,17 @@ import {
   VaultLockedError, 
   ApiKeyNotFoundError 
 } from "./vault/keys.js";
+import { listModels } from "./vault/models.js";
 import { vaultState } from "./vault/state.js";
 import { 
   VaultStatusResponse, 
   VaultInitResponse, 
   VaultUnlockResponse,
   AddApiKeyResponse,
-  ListApiKeysResponse
+  ListApiKeysResponse,
+  ListModelsResponse
 } from "@ai-vault/types";
+
 
 function readJsonBody<T = any>(req: IncomingMessage): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -227,6 +230,19 @@ export function createVaultHttpServer() {
 
         await removeApiKey(id);
         sendJson(res, 200, { success: true });
+        return;
+      }
+
+      // 11. List AI Models (optionally filtered by ?provider=)
+      if (method === "GET" && pathname === "/models") {
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+
+        const providerQuery = url.searchParams.get("provider") || undefined;
+        const models = await listModels(providerQuery);
+        sendJson<ListModelsResponse>(res, 200, { success: true, models });
         return;
       }
 

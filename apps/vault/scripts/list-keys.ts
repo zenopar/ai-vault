@@ -107,6 +107,9 @@ async function main() {
       console.log(`- [${k.provider.toUpperCase()}] ${k.name}`);
       console.log(`  ID:      ${k.id}`);
       console.log(`  Active:  ${k.isActive}`);
+      if (k.models && k.models.length > 0) {
+        console.log(`  Models:  ${k.models.map((m: any) => m.name).join(", ")}`);
+      }
       console.log(`  Created: ${k.createdAt}`);
       console.log("");
     }

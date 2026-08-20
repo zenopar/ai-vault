@@ -82,6 +82,9 @@ describe("AI API Keys API (Unit Tests / In-Memory Mock DB)", () => {
     expect(res.body.key.provider).toBe("openai");
     expect(res.body.key.name).toBe("My OpenAI Key");
     expect(res.body.key.id).toBeDefined();
+    expect(res.body.key.models).toBeDefined();
+    expect(res.body.key.models.length).toBeGreaterThan(0);
+    expect(res.body.key.models.some((m: any) => m.name === "gpt-5.6-sol")).toBe(true);
 
     const keyId = res.body.key.id;
 
@@ -107,6 +110,10 @@ describe("AI API Keys API (Unit Tests / In-Memory Mock DB)", () => {
     expect(listRes.status).toBe(200);
     expect(listRes.body.keys).toHaveLength(1);
     expect(listRes.body.keys[0].name).toBe("My OpenAI Key");
+    expect(listRes.body.keys[0].models).toBeDefined();
+    expect(listRes.body.keys[0].models.some((m: any) => m.name === "gpt-5.6-sol")).toBe(true);
+
+
 
     // 5. Decrypt key internally (for use by Vault Service when calling AI providers)
     const decryptedKey = await getDecryptedApiKey(keyId);
