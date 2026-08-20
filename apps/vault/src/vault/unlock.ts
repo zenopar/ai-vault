@@ -1,5 +1,10 @@
 import { getVaultConfig } from "../db/repository/vault.repository.js";
-import { deriveKey, decryptBuffer } from "./crypto.js";
+import { 
+  deriveKey, 
+  decryptBuffer, 
+  AAD_WRAPPED_VAULT_KEY_MASTER, 
+  AAD_WRAPPED_VAULT_KEY_RECOVERY 
+} from "./crypto.js";
 import { vaultState } from "./state.js";
 import { VaultUnlockResponse } from "@ai-vault/types";
 
@@ -44,7 +49,8 @@ export async function unlockVault(password: string): Promise<VaultUnlockResponse
         iv: dbConfig.wrapped_vault_key_iv,
         tag: dbConfig.wrapped_vault_key_tag,
       },
-      wrappingKey
+      wrappingKey,
+      AAD_WRAPPED_VAULT_KEY_MASTER
     );
   } catch (e) {
     // Master password decryption failed, fall through to recovery code
@@ -66,7 +72,8 @@ export async function unlockVault(password: string): Promise<VaultUnlockResponse
           iv: dbConfig.wrapped_vault_key_recovery_iv,
           tag: dbConfig.wrapped_vault_key_recovery_tag,
         },
-        recoveryWrappingKey
+        recoveryWrappingKey,
+        AAD_WRAPPED_VAULT_KEY_RECOVERY
       );
     } catch (e) {
       // Recovery password decryption failed

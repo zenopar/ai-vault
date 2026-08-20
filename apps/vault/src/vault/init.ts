@@ -6,7 +6,9 @@ import {
   generateRecoveryPassword, 
   deriveKey, 
   encryptBuffer, 
-  DEFAULT_KDF_PARAMS 
+  DEFAULT_KDF_PARAMS,
+  AAD_WRAPPED_VAULT_KEY_MASTER,
+  AAD_WRAPPED_VAULT_KEY_RECOVERY
 } from "./crypto.js";
 import { vaultState } from "./state.js";
 import { VaultInitResponse } from "@ai-vault/types";
@@ -41,9 +43,9 @@ export async function initVault(masterPassword: string): Promise<VaultInitRespon
   const wrappingKey = await deriveKey(masterPassword, kdfSalt, DEFAULT_KDF_PARAMS);
   const recoveryWrappingKey = await deriveKey(recoveryPassword, recoverySalt, DEFAULT_KDF_PARAMS);
 
-  // Encrypt the Vault Key
-  const wrappedVaultKey = encryptBuffer(vaultKey, wrappingKey);
-  const wrappedRecoveryKey = encryptBuffer(vaultKey, recoveryWrappingKey);
+  // Encrypt the Vault Key with explicit domain-separated AAD
+  const wrappedVaultKey = encryptBuffer(vaultKey, wrappingKey, AAD_WRAPPED_VAULT_KEY_MASTER);
+  const wrappedRecoveryKey = encryptBuffer(vaultKey, recoveryWrappingKey, AAD_WRAPPED_VAULT_KEY_RECOVERY);
 
   // Save everything to DB
   await createVaultConfig({

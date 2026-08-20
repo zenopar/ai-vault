@@ -28,8 +28,8 @@ export class ApiKeyNotFoundError extends Error {
  * Builds standard Additional Authenticated Data (AAD) for database field encryption
  * Format based on README: type:<record_type>|id:<record_id>|field:<field_name>|v:<version>
  */
-export function buildFieldAad(recordType: string, recordId: string, fieldName: string, version = 1): string {
-  return `type:${recordType}|id:${recordId}|field:${fieldName}|v:${version}`;
+export function buildFieldAad(recordType: string, recordId: string, fieldName: string, version = 1): Buffer {
+  return Buffer.from(`type:${recordType}|id:${recordId}|field:${fieldName}|v:${version}`, "utf-8");
 }
 
 /**

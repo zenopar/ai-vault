@@ -65,21 +65,24 @@ export async function deriveKey(password: string, saltHex: string, params: KdfPa
   return key;
 }
 
-export const HKDF_INFO_DB = "ai-vault/db/v1";
-export const HKDF_INFO_FILES = "ai-vault/files/v1";
-export const HKDF_INFO_SECRETS = "ai-vault/secrets/v1";
+export const HKDF_INFO_DB = Buffer.from("ai-vault/db/v1", "utf-8");
+export const HKDF_INFO_FILES = Buffer.from("ai-vault/files/v1", "utf-8");
+export const HKDF_INFO_SECRETS = Buffer.from("ai-vault/secrets/v1", "utf-8");
+
+export const AAD_WRAPPED_VAULT_KEY_MASTER = Buffer.from("ai-vault/wrapped-vault-key/master/v1", "utf-8");
+export const AAD_WRAPPED_VAULT_KEY_RECOVERY = Buffer.from("ai-vault/wrapped-vault-key/recovery/v1", "utf-8");
 
 /**
  * Derives a sub-key from a master key using HKDF-SHA256
  */
-export function deriveSubKey(masterKey: Buffer, info: string, salt: Buffer = Buffer.alloc(0), length = 32): Buffer {
-  return Buffer.from(crypto.hkdfSync("sha256", masterKey, salt, Buffer.from(info, "utf-8"), length));
+export function deriveSubKey(masterKey: Buffer, info: Buffer, salt: Buffer = Buffer.alloc(0), length = 32): Buffer {
+  return Buffer.from(crypto.hkdfSync("sha256", masterKey, salt, info, length));
 }
 
 /**
- * Encrypts a buffer using AES-256-GCM with optional AAD
+ * Encrypts a buffer using AES-256-GCM with mandatory AAD buffer
  */
-export function encryptBuffer(plaintext: Buffer, key: Buffer, aad?: Buffer | string): EncryptedData {
+export function encryptBuffer(plaintext: Buffer, key: Buffer, aad: Buffer): EncryptedData {
   if (key.length !== 32) {
     throw new Error("Invalid key length. AES-256-GCM requires a 32-byte key.");
   }
@@ -87,9 +90,8 @@ export function encryptBuffer(plaintext: Buffer, key: Buffer, aad?: Buffer | str
   const iv = crypto.randomBytes(12); // 96-bit IV is standard for GCM
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
   
-  if (aad) {
-    const aadBuffer = typeof aad === "string" ? Buffer.from(aad, "utf-8") : aad;
-    cipher.setAAD(aadBuffer);
+  if (aad.length > 0) {
+    cipher.setAAD(aad);
   }
 
   const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
@@ -103,9 +105,9 @@ export function encryptBuffer(plaintext: Buffer, key: Buffer, aad?: Buffer | str
 }
 
 /**
- * Decrypts a buffer using AES-256-GCM with optional AAD
+ * Decrypts a buffer using AES-256-GCM with mandatory AAD buffer
  */
-export function decryptBuffer(encrypted: EncryptedData, key: Buffer, aad?: Buffer | string): Buffer {
+export function decryptBuffer(encrypted: EncryptedData, key: Buffer, aad: Buffer): Buffer {
   if (key.length !== 32) {
     throw new Error("Invalid key length. AES-256-GCM requires a 32-byte key.");
   }
@@ -116,9 +118,8 @@ export function decryptBuffer(encrypted: EncryptedData, key: Buffer, aad?: Buffe
 
   const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
   
-  if (aad) {
-    const aadBuffer = typeof aad === "string" ? Buffer.from(aad, "utf-8") : aad;
-    decipher.setAAD(aadBuffer);
+  if (aad.length > 0) {
+    decipher.setAAD(aad);
   }
 
   decipher.setAuthTag(tag);
