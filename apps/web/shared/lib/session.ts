@@ -22,6 +22,14 @@ export async function createSession(token: string): Promise<void> {
 }
 
 /**
+ * Gets the current session token from the HttpOnly cookie.
+ */
+export async function getSessionToken(): Promise<string | undefined> {
+  const cookieStore = await cookies();
+  return cookieStore.get(SESSION_COOKIE_NAME)?.value;
+}
+
+/**
  * Verifies if the request has a valid session cookie by asking the Vault backend.
  */
 export async function verifySession(): Promise<boolean> {
