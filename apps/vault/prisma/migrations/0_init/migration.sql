@@ -31,3 +31,22 @@ CREATE TABLE IF NOT EXISTS "vault"."vault_config" (
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Table for storing encrypted AI Provider API keys (Encrypted with Master Vault Key via AES-256-GCM)
+CREATE TABLE IF NOT EXISTS "vault"."ai_api_keys" (
+    "id" VARCHAR(36) PRIMARY KEY,
+    "provider" VARCHAR(64) NOT NULL,               -- e.g. 'openai', 'anthropic', 'google', 'groq', etc.
+    "name" VARCHAR(128) NOT NULL,                  -- User-friendly label / identifier
+    
+    -- Encrypted API key (AES-256-GCM)
+    "encrypted_key" TEXT NOT NULL,                 -- Ciphertext
+    "iv" VARCHAR(32) NOT NULL,                     -- 12-byte IV / Nonce (Hex)
+    "tag" VARCHAR(32) NOT NULL,                    -- 16-byte Auth Tag (Hex)
+
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+
+    -- Timestamps
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
