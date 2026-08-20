@@ -1,29 +1,30 @@
-import { describe, it, expect, beforeEach, afterAll, beforeAll } from "vitest";
+import { describe, it, expect, beforeEach, afterAll, beforeAll, vi } from "vitest";
 import { createVaultHttpServer } from "../src/server.js";
-import { getPrismaClient } from "../src/db/client.js";
 import { config } from "../src/config.js";
 import { vaultState } from "../src/vault/state.js";
 import { initVault } from "../src/vault/init.js";
 import { getDecryptedApiKey } from "../src/vault/keys.js";
+import { createInMemoryPrismaMock } from "./helpers/mockDb.js";
 import request from "supertest";
 
-describe("AI API Keys API", () => {
+describe("AI API Keys API (Unit Tests / In-Memory Mock DB)", () => {
   const server = createVaultHttpServer();
-  const prisma = getPrismaClient();
+  const dbMock = createInMemoryPrismaMock();
+  const prisma = dbMock.mockPrisma;
 
   beforeAll(() => {
     config.ipcSecret = "test-secret";
   });
 
-  beforeEach(async () => {
-    // Reset state & DB
+  beforeEach(() => {
     vaultState.lock();
-    await prisma.ai_api_keys.deleteMany();
-    await prisma.vault_config.deleteMany();
+    dbMock.reset();
   });
 
-  afterAll(async () => {
-    await prisma.$disconnect();
+  afterAll(() => {
+    vaultState.lock();
+    dbMock.reset();
+    vi.restoreAllMocks();
   });
 
   it("should return 401 if missing IPC secret", async () => {
@@ -127,6 +128,9 @@ describe("AI API Keys API", () => {
 
     // Decrypting swapped-id with same ciphertext should fail because AAD binds to record ID
     await expect(getDecryptedApiKey("swapped-id-12345")).rejects.toThrow();
+
+    // Clean up the swapped test record immediately
+    await prisma.ai_api_keys.delete({ where: { id: "swapped-id-12345" } });
 
     // 7. Delete key via RESTful DELETE /keys/:id (requires session token)
     const deleteRes = await request(server)

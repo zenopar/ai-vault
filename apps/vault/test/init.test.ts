@@ -1,24 +1,25 @@
 import { describe, it, expect, beforeEach, vi, afterAll, beforeAll } from "vitest";
 import { createVaultHttpServer } from "../src/server.js";
-import { getPrismaClient } from "../src/db/client.js";
 import { config } from "../src/config.js";
+import { createInMemoryPrismaMock } from "./helpers/mockDb.js";
 import request from "supertest";
 
-describe("POST /init", () => {
+describe("POST /init (Unit Tests / In-Memory Mock DB)", () => {
   const server = createVaultHttpServer();
-  const prisma = getPrismaClient();
+  const dbMock = createInMemoryPrismaMock();
+  const prisma = dbMock.mockPrisma;
 
   beforeAll(() => {
     config.ipcSecret = "test-secret";
   });
 
-  beforeEach(async () => {
-    // Clear the database before each test
-    await prisma.vault_config.deleteMany();
+  beforeEach(() => {
+    dbMock.reset();
   });
 
-  afterAll(async () => {
-    await prisma.$disconnect();
+  afterAll(() => {
+    dbMock.reset();
+    vi.restoreAllMocks();
   });
 
   it("should return 401 if missing IPC secret", async () => {
