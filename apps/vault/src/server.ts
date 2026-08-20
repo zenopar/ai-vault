@@ -221,8 +221,24 @@ export function createVaultHttpServer() {
 
         // Successfully unlocked, load into RAM
         vaultState.setUnlocked(vaultKey);
+        
+        // Create session token and store hash in RAM
+        const sessionToken = vaultState.createSession();
 
-        sendJson<VaultUnlockResponse>(res, 200, { success: true });
+        sendJson<VaultUnlockResponse>(res, 200, { success: true, sessionToken } as any);
+        return;
+      }
+
+      // 5. Verify session endpoint (Protected)
+      if (method === "POST" && pathname === "/verify-session") {
+        const body = await readJsonBody(req);
+        if (!body.token || typeof body.token !== "string") {
+          sendJson(res, 400, { error: "token is required and must be a string." });
+          return;
+        }
+
+        const isValid = vaultState.verifySession(body.token);
+        sendJson(res, 200, { valid: isValid });
         return;
       }
 
