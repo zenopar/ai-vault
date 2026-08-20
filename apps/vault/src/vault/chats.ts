@@ -6,6 +6,7 @@ import {
   createChatRecord,
   getChatRecordById,
   getAllChatsRecords,
+  updateChatRecord,
   deleteChatRecord,
   type ChatRecord,
 } from "../db/repository/chats.repository.js";
@@ -123,7 +124,7 @@ export async function createChat(params: CreateChatParams = {}): Promise<ChatMet
 /**
  * Lists all active chats with decrypted titles and metadata.
  */
-export async function listChats(): Promise<ChatMetadata[]> {
+export async function listChats(limit?: number, offset?: number): Promise<ChatMetadata[]> {
   if (!vaultState.isUnlocked()) {
     throw new VaultLockedError();
   }
@@ -133,7 +134,7 @@ export async function listChats(): Promise<ChatMetadata[]> {
     throw new VaultLockedError("Database encryption key is unavailable in memory.");
   }
 
-  const records = await getAllChatsRecords();
+  const records = await getAllChatsRecords(limit, offset);
   const chats: ChatMetadata[] = [];
 
   for (const record of records) {
@@ -360,9 +361,11 @@ async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<S
   }
 
   let chat: ChatMetadata;
+  let chatRecord: ChatRecord | null = null;
 
   if (params.chatId) {
     chat = await getChat(params.chatId);
+    chatRecord = await getChatRecordById(params.chatId);
   } else {
     // Automatically create a new chat with derived title
     const derivedTitle = deriveTitleFromPrompt(trimmedMessage);
@@ -373,15 +376,45 @@ async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<S
         model: params.model || null,
       },
     });
+    chatRecord = await getChatRecordById(chat.id);
   }
 
-  // Retrieve prior conversation messages for context (limit history to last 6 messages)
-  const existingMessages = await getChatMessages(chat.id, 6, 0, "desc");
-  existingMessages.reverse(); // Put them in chronological order
+  // Retrieve prior conversation messages for context
+  const existingMessages = await getChatMessages(chat.id, 100, 0, "desc");
   
-  const latestSeq = existingMessages.length > 0 ? existingMessages[existingMessages.length - 1].sequenceNumber : 0;
+  const maxTokens = 2500;
+  const userMessageTokens = Math.ceil(trimmedMessage.length / 4);
+  let currentTokens = userMessageTokens;
+  
+  const includedMessages: typeof existingMessages = [];
+  
+  for (const m of existingMessages) {
+    const mTokens = m.inputTokens ? m.inputTokens : Math.ceil(m.content.length / 4);
+    if (currentTokens + mTokens > maxTokens) {
+      break;
+    }
+    currentTokens += mTokens;
+    includedMessages.push(m);
+  }
+  
+  includedMessages.reverse(); // Put them in chronological order
+  
+  const latestSeq = existingMessages.length > 0 ? existingMessages[0].sequenceNumber : 0;
 
-  // 1. Encrypt and store user message
+  // 1. Prepare prompt context for AI completion
+  const promptContext: ChatMessagePrompt[] = [
+    ...includedMessages.map((m) => ({ role: m.role, content: m.content })),
+    { role: "user", content: trimmedMessage },
+  ];
+
+  // 2. Execute AI generation
+  const aiResult = await executeAiCompletion({
+    messages: promptContext,
+    provider: params.provider,
+    model: params.model,
+  });
+
+  // 3. Encrypt and store user message (Now happens AFTER successful AI generation)
   const userMsgId = randomUUID();
   const userAad = buildFieldAad("message", userMsgId, "content", 1);
   const encUserContent = encryptBuffer(Buffer.from(trimmedMessage, "utf-8"), dbKey, userAad);
@@ -407,19 +440,6 @@ async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<S
     updatedAt: userRecord.updated_at.toISOString(),
   };
 
-  // 2. Prepare prompt context for AI completion
-  const promptContext: ChatMessagePrompt[] = [
-    ...existingMessages.map((m) => ({ role: m.role, content: m.content })),
-    { role: "user", content: trimmedMessage },
-  ];
-
-  // 3. Execute AI generation
-  const aiResult = await executeAiCompletion({
-    messages: promptContext,
-    provider: params.provider,
-    model: params.model,
-  });
-
   // 4. Encrypt and store assistant message
   const assistantMsgId = randomUUID();
   const assistantAad = buildFieldAad("message", assistantMsgId, "content", 1);
@@ -439,6 +459,46 @@ async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<S
     encTokensCipher = encTokens.ciphertext;
     tokensIv = encTokens.iv;
     tokensTag = encTokens.tag;
+    
+    // Update Chat Tokens
+    if (chatRecord) {
+      let chatInputTokens = 0;
+      let chatOutputTokens = 0;
+      
+      if (chatRecord.encrypted_input_tokens && chatRecord.input_tokens_iv && chatRecord.input_tokens_tag) {
+        try {
+          const inAad = buildFieldAad("chat", chat.id, "input_tokens", chatRecord.encryption_version);
+          const decIn = decryptBuffer({ ciphertext: chatRecord.encrypted_input_tokens, iv: chatRecord.input_tokens_iv, tag: chatRecord.input_tokens_tag }, dbKey, inAad);
+          chatInputTokens = parseInt(decIn.toString("utf-8"), 10) || 0;
+        } catch (e) {}
+      }
+      
+      if (chatRecord.encrypted_output_tokens && chatRecord.output_tokens_iv && chatRecord.output_tokens_tag) {
+        try {
+          const outAad = buildFieldAad("chat", chat.id, "output_tokens", chatRecord.encryption_version);
+          const decOut = decryptBuffer({ ciphertext: chatRecord.encrypted_output_tokens, iv: chatRecord.output_tokens_iv, tag: chatRecord.output_tokens_tag }, dbKey, outAad);
+          chatOutputTokens = parseInt(decOut.toString("utf-8"), 10) || 0;
+        } catch (e) {}
+      }
+      
+      chatInputTokens += (aiResult.inputTokens || 0);
+      chatOutputTokens += (aiResult.outputTokens || 0);
+      
+      const inAad = buildFieldAad("chat", chat.id, "input_tokens", chatRecord.encryption_version);
+      const encIn = encryptBuffer(Buffer.from(chatInputTokens.toString(), "utf-8"), dbKey, inAad);
+      
+      const outAad = buildFieldAad("chat", chat.id, "output_tokens", chatRecord.encryption_version);
+      const encOut = encryptBuffer(Buffer.from(chatOutputTokens.toString(), "utf-8"), dbKey, outAad);
+      
+      await updateChatRecord(chat.id, {
+        encrypted_input_tokens: encIn.ciphertext,
+        input_tokens_iv: encIn.iv,
+        input_tokens_tag: encIn.tag,
+        encrypted_output_tokens: encOut.ciphertext,
+        output_tokens_iv: encOut.iv,
+        output_tokens_tag: encOut.tag,
+      });
+    }
   }
 
   const assistantRecord = await createMessageRecord({

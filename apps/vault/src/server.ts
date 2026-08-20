@@ -290,7 +290,18 @@ export function createVaultHttpServer() {
           return;
         }
 
-        const chats = await listChats();
+        const limitParam = url.searchParams.get("limit");
+        const offsetParam = url.searchParams.get("offset");
+        
+        const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+        const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
+
+        if ((limit !== undefined && Number.isNaN(limit)) || (offset !== undefined && Number.isNaN(offset))) {
+          sendJson(res, 400, { error: "Invalid limit or offset parameter." });
+          return;
+        }
+
+        const chats = await listChats(limit, offset);
         sendJson<ListChatsResponse>(res, 200, { success: true, chats });
         return;
       }

@@ -14,9 +14,9 @@ export interface ActionResult<T = unknown> {
   error?: string;
 }
 
-export async function listChatsAction(): Promise<ActionResult<ChatMetadata[]>> {
+export async function listChatsAction(limit = 50, offset = 0): Promise<ActionResult<ChatMetadata[]>> {
   try {
-    const chats = await listChatsService();
+    const chats = await listChatsService(limit, offset);
     return { success: true, data: chats };
   } catch (error) {
     return {

@@ -9,13 +9,18 @@ import {
   ChatMessageDto,
 } from "@ai-vault/types";
 
-export async function listChatsService(): Promise<ChatMetadata[]> {
+export async function listChatsService(limit = 50, offset = 0): Promise<ChatMetadata[]> {
   const sessionToken = await getSessionToken();
   if (!sessionToken) {
     throw new Error("No active session. Please unlock the vault.");
   }
 
-  const response = await VaultApiClient.sendGetRequest<ListChatsResponse>("/chats", {
+  const params = new URLSearchParams();
+  if (limit) params.append("limit", limit.toString());
+  if (offset) params.append("offset", offset.toString());
+  const query = params.toString() ? `?${params.toString()}` : "";
+
+  const response = await VaultApiClient.sendGetRequest<ListChatsResponse>(`/chats${query}`, {
     sessionToken,
   });
 

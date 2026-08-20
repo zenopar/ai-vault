@@ -96,11 +96,13 @@ export async function getChatRecordById(id: string): Promise<ChatRecord | null> 
   });
 }
 
-export async function getAllChatsRecords(): Promise<ChatRecord[]> {
+export async function getAllChatsRecords(limit?: number, offset?: number): Promise<ChatRecord[]> {
   const prisma = getPrismaClient();
   return prisma.chats.findMany({
     where: { status: "ACTIVE" },
     orderBy: { updated_at: "desc" },
+    take: limit,
+    skip: offset,
   });
 }
 
