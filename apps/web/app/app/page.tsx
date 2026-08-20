@@ -1,12 +1,16 @@
-import { getVaultStatus } from "../../features/vault/services/vault-status.service";
 import { redirect } from "next/navigation";
-import { verifySession } from "../../shared/lib/session";
+import { verifySession } from "@/shared/lib/session";
+import { getVaultStatus } from "@/features/vault/services/vault-status.service";
+import { listChatsService } from "@/features/chat/services/chat.service";
+import { listApiKeysService } from "@/features/keys/services/keys.service";
+import { ChatInterface } from "@/features/chat/components/chat-interface";
+import { ChatMetadata, AiApiKeyMetadata } from "@ai-vault/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function AppDashboard() {
   const isValidSession = await verifySession();
-  
+
   if (!isValidSession) {
     redirect("/");
   }
@@ -14,13 +18,22 @@ export default async function AppDashboard() {
   const status = await getVaultStatus();
 
   if (status.status !== "UNLOCKED") {
-    // If the vault isn't unlocked, throw them back to the login page
     redirect("/");
   }
 
-  return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
-      <h1 className="text-6xl font-bold text-gray-900 tracking-widest">APP</h1>
-    </div>
-  );
+  let chats: ChatMetadata[] = [];
+  let keys: AiApiKeyMetadata[] = [];
+
+  try {
+    const [fetchedChats, fetchedKeys] = await Promise.all([
+      listChatsService().catch(() => []),
+      listApiKeysService().catch(() => []),
+    ]);
+    chats = fetchedChats;
+    keys = fetchedKeys;
+  } catch (error) {
+    console.error("[AppDashboard] Failed to fetch initial data:", error);
+  }
+
+  return <ChatInterface initialChats={chats} initialKeys={keys} />;
 }

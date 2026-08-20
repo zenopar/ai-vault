@@ -1,0 +1,510 @@
+import { randomUUID } from "node:crypto";
+import { vaultState } from "./state.js";
+import { encryptBuffer, decryptBuffer } from "./crypto.js";
+import { buildFieldAad, VaultLockedError } from "./keys.js";
+import {
+  createChatRecord,
+  getChatRecordById,
+  getAllChatsRecords,
+  deleteChatRecord,
+  type ChatRecord,
+} from "../db/repository/chats.repository.js";
+import {
+  createMessageRecord,
+  getMessagesByChatId,
+} from "../db/repository/messages.repository.js";
+import { executeAiCompletion, type ChatMessagePrompt } from "./ai/ai-provider.js";
+import { ChatMetadata, ChatMessageDto } from "@ai-vault/types";
+
+export class ChatNotFoundError extends Error {
+  constructor(message = "Chat not found.") {
+    super(message);
+    this.name = "ChatNotFoundError";
+  }
+}
+
+export interface CreateChatParams {
+  id?: string;
+  title?: string;
+  metadata?: Record<string, any> | null;
+}
+
+export interface SendMessageParams {
+  chatId?: string;
+  message: string;
+  provider?: string;
+  model?: string;
+}
+
+export interface SendMessageResult {
+  chat: ChatMetadata;
+  userMessage: ChatMessageDto;
+  assistantMessage: ChatMessageDto;
+}
+
+const activeChatLocks = new Set<string>();
+
+function decryptChatMetadata(record: ChatRecord, dbKey: Buffer): Record<string, any> | null {
+  if (record.encrypted_metadata && record.metadata_iv && record.metadata_tag) {
+    try {
+      const metaAad = buildFieldAad("chat", record.id, "metadata", record.encryption_version);
+      const decMeta = decryptBuffer(
+        {
+          ciphertext: record.encrypted_metadata,
+          iv: record.metadata_iv,
+          tag: record.metadata_tag,
+        },
+        dbKey,
+        metaAad
+      );
+      return JSON.parse(decMeta.toString("utf-8"));
+    } catch (e) {
+      console.warn(`Failed to decrypt metadata for chat ${record.id}:`, e);
+    }
+  }
+  return null;
+}
+
+/**
+ * Creates and encrypts a new chat record in the database using the in-memory dbKey.
+ */
+export async function createChat(params: CreateChatParams = {}): Promise<ChatMetadata> {
+  if (!vaultState.isUnlocked()) {
+    throw new VaultLockedError();
+  }
+
+  const dbKey = vaultState.getDbKey();
+  if (!dbKey) {
+    throw new VaultLockedError("Database encryption key is unavailable in memory.");
+  }
+
+  const chatId = params.id || randomUUID();
+  const rawTitle = params.title && params.title.trim() ? params.title.trim() : "New Chat";
+  const titleAad = buildFieldAad("chat", chatId, "title", 1);
+  const encryptedTitle = encryptBuffer(Buffer.from(rawTitle, "utf-8"), dbKey, titleAad);
+
+  let encryptedMetadata: string | null = null;
+  let metadataIv: string | null = null;
+  let metadataTag: string | null = null;
+
+  if (params.metadata !== undefined && params.metadata !== null) {
+    const metadataStr = JSON.stringify(params.metadata);
+    const metadataAad = buildFieldAad("chat", chatId, "metadata", 1);
+    const enc = encryptBuffer(Buffer.from(metadataStr, "utf-8"), dbKey, metadataAad);
+    encryptedMetadata = enc.ciphertext;
+    metadataIv = enc.iv;
+    metadataTag = enc.tag;
+  }
+
+  const record = await createChatRecord({
+    id: chatId,
+    encryption_version: 1,
+    status: "ACTIVE",
+    encrypted_title: encryptedTitle.ciphertext,
+    title_iv: encryptedTitle.iv,
+    title_tag: encryptedTitle.tag,
+    encrypted_metadata: encryptedMetadata,
+    metadata_iv: metadataIv,
+    metadata_tag: metadataTag,
+  });
+
+  vaultState.touch();
+
+  return {
+    id: record.id,
+    title: rawTitle,
+    status: record.status,
+    metadata: params.metadata ?? null,
+    createdAt: record.created_at.toISOString(),
+    updatedAt: record.updated_at.toISOString(),
+  };
+}
+
+/**
+ * Lists all active chats with decrypted titles and metadata.
+ */
+export async function listChats(): Promise<ChatMetadata[]> {
+  if (!vaultState.isUnlocked()) {
+    throw new VaultLockedError();
+  }
+
+  const dbKey = vaultState.getDbKey();
+  if (!dbKey) {
+    throw new VaultLockedError("Database encryption key is unavailable in memory.");
+  }
+
+  const records = await getAllChatsRecords();
+  const chats: ChatMetadata[] = [];
+
+  for (const record of records) {
+    let title = "Untitled Chat";
+    try {
+      const titleAad = buildFieldAad("chat", record.id, "title", record.encryption_version);
+      const decTitle = decryptBuffer(
+        {
+          ciphertext: record.encrypted_title,
+          iv: record.title_iv,
+          tag: record.title_tag,
+        },
+        dbKey,
+        titleAad
+      );
+      title = decTitle.toString("utf-8");
+    } catch (e) {
+      console.warn(`Failed to decrypt title for chat ${record.id}:`, e);
+    }
+
+    const metadata = decryptChatMetadata(record, dbKey);
+
+    chats.push({
+      id: record.id,
+      title,
+      status: record.status,
+      metadata,
+      createdAt: record.created_at.toISOString(),
+      updatedAt: record.updated_at.toISOString(),
+    });
+  }
+
+  vaultState.touch();
+  return chats;
+}
+
+/**
+ * Gets a single chat by ID with decrypted fields.
+ */
+export async function getChat(id: string): Promise<ChatMetadata> {
+  if (!vaultState.isUnlocked()) {
+    throw new VaultLockedError();
+  }
+
+  const dbKey = vaultState.getDbKey();
+  if (!dbKey) {
+    throw new VaultLockedError("Database encryption key is unavailable in memory.");
+  }
+
+  const record = await getChatRecordById(id);
+  if (!record || record.status !== "ACTIVE") {
+    throw new ChatNotFoundError();
+  }
+
+  let title = "Untitled Chat";
+  try {
+    const titleAad = buildFieldAad("chat", record.id, "title", record.encryption_version);
+    const decTitle = decryptBuffer(
+      {
+        ciphertext: record.encrypted_title,
+        iv: record.title_iv,
+        tag: record.title_tag,
+      },
+      dbKey,
+      titleAad
+    );
+    title = decTitle.toString("utf-8");
+  } catch (e) {
+    console.warn(`[getChat] Decryption failed for chat title (${record.id}):`, e);
+  }
+
+  const metadata = decryptChatMetadata(record, dbKey);
+
+  vaultState.touch();
+
+  return {
+    id: record.id,
+    title,
+    status: record.status,
+    metadata,
+    createdAt: record.created_at.toISOString(),
+    updatedAt: record.updated_at.toISOString(),
+  };
+}
+
+/**
+ * Retrieves and decrypts all messages for a given chat.
+ */
+export async function getChatMessages(
+  chatId: string,
+  limit?: number,
+  offset?: number,
+  sort: "asc" | "desc" = "asc"
+): Promise<ChatMessageDto[]> {
+  if (!vaultState.isUnlocked()) {
+    throw new VaultLockedError();
+  }
+
+  const dbKey = vaultState.getDbKey();
+  if (!dbKey) {
+    throw new VaultLockedError("Database encryption key is unavailable in memory.");
+  }
+
+  const messageRecords = await getMessagesByChatId(chatId, limit, offset, sort);
+  const messages: ChatMessageDto[] = [];
+
+  for (const msg of messageRecords) {
+    let content = "[Failed to decrypt message content]";
+    try {
+      const aad = buildFieldAad("message", msg.id, "content", msg.encryption_version);
+      const decrypted = decryptBuffer(
+        {
+          ciphertext: msg.encrypted_content,
+          iv: msg.content_iv,
+          tag: msg.content_tag,
+        },
+        dbKey,
+        aad
+      );
+      content = decrypted.toString("utf-8");
+    } catch (e) {
+      console.warn(`[getChatMessages] Decryption failed for message (${msg.id}):`, e);
+    }
+
+    let inputTokens: number | undefined = undefined;
+    let outputTokens: number | undefined = undefined;
+
+    if (msg.encrypted_tokens && msg.tokens_iv && msg.tokens_tag) {
+      try {
+        const tokensAad = buildFieldAad("message", msg.id, "tokens", msg.encryption_version);
+        const decTokens = decryptBuffer(
+          {
+            ciphertext: msg.encrypted_tokens,
+            iv: msg.tokens_iv,
+            tag: msg.tokens_tag,
+          },
+          dbKey,
+          tokensAad
+        );
+        const parsed = JSON.parse(decTokens.toString("utf-8"));
+        inputTokens = typeof parsed.inputTokens === "number" ? parsed.inputTokens : undefined;
+        outputTokens = typeof parsed.outputTokens === "number" ? parsed.outputTokens : undefined;
+      } catch (e) {
+        console.warn(`[getChatMessages] Decryption failed for message tokens (${msg.id}):`, e);
+      }
+    }
+
+    messages.push({
+      id: msg.id,
+      chatId: msg.chat_id,
+      role: msg.role as "user" | "assistant" | "system",
+      content,
+      sequenceNumber: msg.sequence_number,
+      inputTokens,
+      outputTokens,
+      createdAt: msg.created_at.toISOString(),
+      updatedAt: msg.updated_at.toISOString(),
+    });
+  }
+
+  vaultState.touch();
+  return messages;
+}
+
+/**
+ * Deletes a chat record and its associated messages.
+ */
+export async function removeChat(id: string): Promise<boolean> {
+  const existing = await getChatRecordById(id);
+  if (!existing) {
+    throw new ChatNotFoundError();
+  }
+
+  await deleteChatRecord(id);
+  return true;
+}
+
+/**
+ * Derives a clean, concise chat title from the first prompt.
+ */
+function deriveTitleFromPrompt(prompt: string): string {
+  const firstLine = prompt.trim().split("\n")[0].trim();
+  if (!firstLine) return "New Chat";
+  if (firstLine.length <= 40) return firstLine;
+  return firstLine.substring(0, 37).trim() + "...";
+}
+
+/**
+ * Sends a user message, creates a chat if needed, invokes AI completion,
+ * strongly encrypts both messages with AES-256-GCM + AAD into the database,
+ * and returns the decrypted result.
+ */
+export async function sendMessageAndExecute(params: SendMessageParams): Promise<SendMessageResult> {
+  if (params.chatId && activeChatLocks.has(params.chatId)) {
+    throw new Error("AI is already processing a message in this chat. Please wait.");
+  }
+  
+  if (params.chatId) {
+    activeChatLocks.add(params.chatId);
+  }
+
+  try {
+    return await _sendMessageAndExecuteInner(params);
+  } finally {
+    if (params.chatId) {
+      activeChatLocks.delete(params.chatId);
+    }
+  }
+}
+
+async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<SendMessageResult> {
+  if (!vaultState.isUnlocked()) {
+    throw new VaultLockedError();
+  }
+
+  const dbKey = vaultState.getDbKey();
+  if (!dbKey) {
+    throw new VaultLockedError("Database encryption key is unavailable in memory.");
+  }
+
+  const trimmedMessage = params.message.trim();
+  if (!trimmedMessage) {
+    throw new Error("Message content cannot be empty.");
+  }
+
+  let chat: ChatMetadata;
+
+  if (params.chatId) {
+    chat = await getChat(params.chatId);
+  } else {
+    // Automatically create a new chat with derived title
+    const derivedTitle = deriveTitleFromPrompt(trimmedMessage);
+    chat = await createChat({
+      title: derivedTitle,
+      metadata: {
+        provider: params.provider || null,
+        model: params.model || null,
+      },
+    });
+  }
+
+  // Retrieve prior conversation messages for context (limit history to last 6 messages)
+  const existingMessages = await getChatMessages(chat.id, 6, 0, "desc");
+  existingMessages.reverse(); // Put them in chronological order
+  
+  const latestSeq = existingMessages.length > 0 ? existingMessages[existingMessages.length - 1].sequenceNumber : 0;
+
+  // 1. Encrypt and store user message
+  const userMsgId = randomUUID();
+  const userAad = buildFieldAad("message", userMsgId, "content", 1);
+  const encUserContent = encryptBuffer(Buffer.from(trimmedMessage, "utf-8"), dbKey, userAad);
+
+  const userRecord = await createMessageRecord({
+    id: userMsgId,
+    chat_id: chat.id,
+    sequence_number: latestSeq + 1,
+    role: "user",
+    encryption_version: 1,
+    encrypted_content: encUserContent.ciphertext,
+    content_iv: encUserContent.iv,
+    content_tag: encUserContent.tag,
+  });
+
+  const userMessageDto: ChatMessageDto = {
+    id: userRecord.id,
+    chatId: userRecord.chat_id,
+    role: "user",
+    content: trimmedMessage,
+    sequenceNumber: userRecord.sequence_number,
+    createdAt: userRecord.created_at.toISOString(),
+    updatedAt: userRecord.updated_at.toISOString(),
+  };
+
+  // 2. Prepare prompt context for AI completion
+  const promptContext: ChatMessagePrompt[] = [
+    ...existingMessages.map((m) => ({ role: m.role, content: m.content })),
+    { role: "user", content: trimmedMessage },
+  ];
+
+  // 3. Execute AI generation
+  const aiResult = await executeAiCompletion({
+    messages: promptContext,
+    provider: params.provider,
+    model: params.model,
+  });
+
+  // 4. Encrypt and store assistant message
+  const assistantMsgId = randomUUID();
+  const assistantAad = buildFieldAad("message", assistantMsgId, "content", 1);
+  const encAssistantContent = encryptBuffer(Buffer.from(aiResult.content, "utf-8"), dbKey, assistantAad);
+
+  let encTokensCipher: string | null = null;
+  let tokensIv: string | null = null;
+  let tokensTag: string | null = null;
+
+  if (aiResult.inputTokens !== undefined || aiResult.outputTokens !== undefined) {
+    const tokensJson = JSON.stringify({
+      inputTokens: aiResult.inputTokens ?? 0,
+      outputTokens: aiResult.outputTokens ?? 0,
+    });
+    const tokensAad = buildFieldAad("message", assistantMsgId, "tokens", 1);
+    const encTokens = encryptBuffer(Buffer.from(tokensJson, "utf-8"), dbKey, tokensAad);
+    encTokensCipher = encTokens.ciphertext;
+    tokensIv = encTokens.iv;
+    tokensTag = encTokens.tag;
+  }
+
+  const assistantRecord = await createMessageRecord({
+    id: assistantMsgId,
+    chat_id: chat.id,
+    sequence_number: latestSeq + 2,
+    role: "assistant",
+    encryption_version: 1,
+    encrypted_content: encAssistantContent.ciphertext,
+    content_iv: encAssistantContent.iv,
+    content_tag: encAssistantContent.tag,
+    encrypted_tokens: encTokensCipher,
+    tokens_iv: tokensIv,
+    tokens_tag: tokensTag,
+  });
+
+  const assistantMessageDto: ChatMessageDto = {
+    id: assistantRecord.id,
+    chatId: assistantRecord.chat_id,
+    role: "assistant",
+    content: aiResult.content,
+    sequenceNumber: assistantRecord.sequence_number,
+    inputTokens: aiResult.inputTokens,
+    outputTokens: aiResult.outputTokens,
+    createdAt: assistantRecord.created_at.toISOString(),
+    updatedAt: assistantRecord.updated_at.toISOString(),
+  };
+
+  vaultState.touch();
+
+  return {
+    chat,
+    userMessage: userMessageDto,
+    assistantMessage: assistantMessageDto,
+  };
+}
+
+/**
+ * Decrypts a chat record title verifying AAD integrity.
+ */
+export async function getDecryptedChatTitle(chatId: string): Promise<string> {
+  if (!vaultState.isUnlocked()) {
+    throw new VaultLockedError();
+  }
+
+  const dbKey = vaultState.getDbKey();
+  if (!dbKey) {
+    throw new VaultLockedError("Database encryption key is unavailable in memory.");
+  }
+
+  const record = await getChatRecordById(chatId);
+  if (!record) {
+    throw new ChatNotFoundError();
+  }
+
+  const aad = buildFieldAad("chat", record.id, "title", record.encryption_version);
+  const decrypted = decryptBuffer(
+    {
+      ciphertext: record.encrypted_title,
+      iv: record.title_iv,
+      tag: record.title_tag,
+    },
+    dbKey,
+    aad
+  );
+
+  vaultState.touch();
+  return decrypted.toString("utf-8");
+}

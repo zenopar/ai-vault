@@ -4,22 +4,36 @@ import { config } from "./config.js";
 import { getVaultStatus } from "./vault/status.js";
 import { initVault, VaultAlreadyInitializedError } from "./vault/init.js";
 import { unlockVault, VaultNotInitializedError, InvalidCredentialsError } from "./vault/unlock.js";
-import { 
-  addApiKey, 
-  listApiKeys, 
-  removeApiKey, 
-  VaultLockedError, 
-  ApiKeyNotFoundError 
+import {
+  addApiKey,
+  listApiKeys,
+  removeApiKey,
+  VaultLockedError,
+  ApiKeyNotFoundError
 } from "./vault/keys.js";
 import { listModels } from "./vault/models.js";
+import {
+  createChat,
+  listChats,
+  getChat,
+  getChatMessages,
+  sendMessageAndExecute,
+  removeChat,
+  ChatNotFoundError
+} from "./vault/chats.js";
+import { NoActiveApiKeyError } from "./vault/ai/ai-provider.js";
 import { vaultState } from "./vault/state.js";
-import { 
-  VaultStatusResponse, 
-  VaultInitResponse, 
+import {
+  VaultStatusResponse,
+  VaultInitResponse,
   VaultUnlockResponse,
   AddApiKeyResponse,
   ListApiKeysResponse,
-  ListModelsResponse
+  ListModelsResponse,
+  CreateChatResponse,
+  ListChatsResponse,
+  SendChatMessageResponse,
+  GetChatMessagesResponse
 } from "@ai-vault/types";
 
 
@@ -38,7 +52,7 @@ function readJsonBody<T = any>(req: IncomingMessage): Promise<T> {
       }
       body += chunk.toString();
     });
-    
+
     req.on("end", () => {
       try {
         resolve(body ? JSON.parse(body) : ({} as T));
@@ -46,7 +60,7 @@ function readJsonBody<T = any>(req: IncomingMessage): Promise<T> {
         reject(new Error("Invalid JSON"));
       }
     });
-    
+
     req.on("error", reject);
   });
 }
@@ -66,13 +80,13 @@ function authenticateIpcRequest(req: IncomingMessage): boolean {
   const clientSecret = req.headers["x-vault-secret"] || req.headers["authorization"]?.replace("Bearer ", "");
   const expectedSecret = config.ipcSecret || "";
   const actualSecret = typeof clientSecret === "string" ? clientSecret : "";
-  
+
   const expectedBuffer = Buffer.from(expectedSecret);
   const actualBuffer = Buffer.from(actualSecret);
-  
+
   if (
-    !expectedSecret || 
-    expectedBuffer.length !== actualBuffer.length || 
+    !expectedSecret ||
+    expectedBuffer.length !== actualBuffer.length ||
     !crypto.timingSafeEqual(expectedBuffer, actualBuffer)
   ) {
     return false;
@@ -81,7 +95,7 @@ function authenticateIpcRequest(req: IncomingMessage): boolean {
 }
 
 function authenticateSessionToken(req: IncomingMessage, body?: { sessionToken?: string }): boolean {
-  const token = 
+  const token =
     (typeof req.headers["x-session-token"] === "string" ? req.headers["x-session-token"] : null) ||
     body?.sessionToken ||
     (typeof req.headers["authorization"] === "string" && req.headers["x-vault-secret"]
@@ -246,6 +260,128 @@ export function createVaultHttpServer() {
         return;
       }
 
+      // 12. Create a new chat
+      if (method === "POST" && pathname === "/chats") {
+        const body = await readJsonBody<{ title?: string; metadata?: Record<string, any>; sessionToken?: string }>(req);
+
+        if (!authenticateSessionToken(req, body)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+
+        if (body.title !== undefined && typeof body.title !== "string") {
+          sendJson(res, 400, { error: "title must be a string if provided." });
+          return;
+        }
+
+        const chat = await createChat({
+          title: body.title,
+          metadata: body.metadata,
+        });
+
+        sendJson<CreateChatResponse>(res, 201, { success: true, chat });
+        return;
+      }
+
+      // 13. List all chats
+      if (method === "GET" && pathname === "/chats") {
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+
+        const chats = await listChats();
+        sendJson<ListChatsResponse>(res, 200, { success: true, chats });
+        return;
+      }
+
+      // 14. Send message (with AI completion & automatic encryption)
+      if (method === "POST" && pathname === "/chats/messages") {
+        const body = await readJsonBody<{
+          chatId?: string;
+          message?: string;
+          provider?: string;
+          model?: string;
+          sessionToken?: string;
+        }>(req);
+
+        if (!authenticateSessionToken(req, body)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+
+        if (!body.message || typeof body.message !== "string" || !body.message.trim()) {
+          sendJson(res, 400, { error: "message is required and must be a non-empty string." });
+          return;
+        }
+
+        const result = await sendMessageAndExecute({
+          chatId: body.chatId,
+          message: body.message,
+          provider: body.provider,
+          model: body.model,
+        });
+
+        sendJson<SendChatMessageResponse>(res, 200, {
+          success: true,
+          chat: result.chat,
+          userMessage: result.userMessage,
+          assistantMessage: result.assistantMessage,
+        });
+        return;
+      }
+
+      // 15. Get chat messages
+      if (method === "GET" && pathname.startsWith("/chats/") && pathname.endsWith("/messages")) {
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+
+        const chatId = pathname.replace(/^\/chats\//, "").replace(/\/messages$/, "").trim();
+        if (!chatId) {
+          sendJson(res, 400, { error: "Chat ID is required." });
+          return;
+        }
+
+        const limitParam = url.searchParams.get("limit");
+        const offsetParam = url.searchParams.get("offset");
+        const sortParam = url.searchParams.get("sort");
+        
+        const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+        const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
+
+        if ((limit !== undefined && Number.isNaN(limit)) || (offset !== undefined && Number.isNaN(offset))) {
+          sendJson(res, 400, { error: "Invalid limit or offset parameter." });
+          return;
+        }
+
+        const sort = sortParam === "desc" ? "desc" : "asc";
+
+        const chat = await getChat(chatId);
+        const messages = await getChatMessages(chatId, limit, offset, sort);
+        sendJson<GetChatMessagesResponse>(res, 200, { success: true, chat, messages });
+        return;
+      }
+
+      // 16. Delete a chat
+      if (method === "DELETE" && pathname.startsWith("/chats/")) {
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+
+        const chatId = pathname.replace(/^\/chats\//, "").trim();
+        if (!chatId) {
+          sendJson(res, 400, { error: "Chat ID is required." });
+          return;
+        }
+
+        await removeChat(chatId);
+        sendJson(res, 200, { success: true });
+        return;
+      }
+
       // Route not found
       sendJson(res, 404, { error: `Route ${method} ${pathname} not found` });
     } catch (err: unknown) {
@@ -264,8 +400,13 @@ export function createVaultHttpServer() {
         return;
       }
 
-      if (err instanceof ApiKeyNotFoundError) {
+      if (err instanceof ApiKeyNotFoundError || err instanceof ChatNotFoundError) {
         sendJson(res, 404, { error: err.message });
+        return;
+      }
+
+      if (err instanceof NoActiveApiKeyError) {
+        sendJson(res, 400, { error: err.message });
         return;
       }
 

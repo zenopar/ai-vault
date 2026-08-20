@@ -66,3 +66,70 @@ export interface ListApiKeysResponse {
   error?: string;
 }
 
+export interface ChatMetadata {
+  id: string;
+  title: string;
+  status: string;
+  metadata?: Record<string, any> | null;
+  inputTokens?: number;
+  outputTokens?: number;
+  inputCost?: number;
+  outputCost?: number;
+  totalCost?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateChatRequest {
+  title?: string;
+  metadata?: Record<string, any>;
+  sessionToken?: string;
+}
+
+export interface CreateChatResponse {
+  success: boolean;
+  chat?: ChatMetadata;
+  error?: string;
+}
+
+export interface ListChatsResponse {
+  success: boolean;
+  chats?: ChatMetadata[];
+  error?: string;
+}
+
+export interface ChatMessageDto {
+  id: string;
+  chatId: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  sequenceNumber: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SendChatMessageRequest {
+  chatId?: string;
+  message: string;
+  provider?: string;
+  model?: string;
+  sessionToken?: string;
+}
+
+export interface SendChatMessageResponse {
+  success: boolean;
+  chat: ChatMetadata;
+  userMessage: ChatMessageDto;
+  assistantMessage: ChatMessageDto;
+  error?: string;
+}
+
+export interface GetChatMessagesResponse {
+  success: boolean;
+  chat?: ChatMetadata;
+  messages?: ChatMessageDto[];
+  error?: string;
+}
+

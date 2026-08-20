@@ -85,6 +85,8 @@ const TEST_MOCK_MODELS = [
 export function createInMemoryPrismaMock() {
   let vaultConfigRecord: any = null;
   const apiKeysMap = new Map<string, any>();
+  const chatsMap = new Map<string, any>();
+  const messagesMap = new Map<string, any>();
   const modelsMap = new Map<string, any>();
 
   const initDefaultModels = () => {
@@ -182,6 +184,136 @@ export function createInMemoryPrismaMock() {
         return { count: 1 };
       }),
     },
+    chats: {
+      findMany: vi.fn(async () => {
+        const list = Array.from(chatsMap.values());
+        return list.sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
+      }),
+      findUnique: vi.fn(async ({ where }: any) => {
+        const item = chatsMap.get(where.id);
+        return item ? { ...item } : null;
+      }),
+      create: vi.fn(async ({ data }: any) => {
+        const record = {
+          id: data.id,
+          encryption_version: data.encryption_version ?? 1,
+          status: data.status ?? "ACTIVE",
+          encrypted_title: data.encrypted_title,
+          title_iv: data.title_iv,
+          title_tag: data.title_tag,
+          encrypted_metadata: data.encrypted_metadata ?? null,
+          metadata_iv: data.metadata_iv ?? null,
+          metadata_tag: data.metadata_tag ?? null,
+          encrypted_input_tokens: data.encrypted_input_tokens ?? null,
+          input_tokens_iv: data.input_tokens_iv ?? null,
+          input_tokens_tag: data.input_tokens_tag ?? null,
+          encrypted_output_tokens: data.encrypted_output_tokens ?? null,
+          output_tokens_iv: data.output_tokens_iv ?? null,
+          output_tokens_tag: data.output_tokens_tag ?? null,
+          encrypted_input_cost: data.encrypted_input_cost ?? null,
+          input_cost_iv: data.input_cost_iv ?? null,
+          input_cost_tag: data.input_cost_tag ?? null,
+          encrypted_output_cost: data.encrypted_output_cost ?? null,
+          output_cost_iv: data.output_cost_iv ?? null,
+          output_cost_tag: data.output_cost_tag ?? null,
+          encrypted_total_cost: data.encrypted_total_cost ?? null,
+          total_cost_iv: data.total_cost_iv ?? null,
+          total_cost_tag: data.total_cost_tag ?? null,
+          created_at: new Date(),
+          updated_at: new Date(),
+        };
+        chatsMap.set(record.id, record);
+        return { ...record };
+      }),
+      update: vi.fn(async ({ where, data }: any) => {
+        const item = chatsMap.get(where.id);
+        if (!item) {
+          throw new Error(`Record to update does not exist: ${where.id}`);
+        }
+        const updated = {
+          ...item,
+          ...data,
+          updated_at: new Date(),
+        };
+        chatsMap.set(where.id, updated);
+        return { ...updated };
+      }),
+      delete: vi.fn(async ({ where }: any) => {
+        const item = chatsMap.get(where.id);
+        if (!item) {
+          throw new Error(`Record to delete does not exist: ${where.id}`);
+        }
+        chatsMap.delete(where.id);
+        return { ...item };
+      }),
+      deleteMany: vi.fn(async () => {
+        chatsMap.clear();
+        return { count: 1 };
+      }),
+    },
+    messages: {
+      findMany: vi.fn(async (args?: any) => {
+        let list = Array.from(messagesMap.values());
+        if (args?.where?.chat_id) {
+          list = list.filter((m) => m.chat_id === args.where.chat_id);
+        }
+        if (args?.where?.status) {
+          list = list.filter((m) => m.status === args.where.status);
+        }
+        return list.sort((a, b) => a.sequence_number - b.sequence_number);
+      }),
+      findFirst: vi.fn(async (args?: any) => {
+        let list = Array.from(messagesMap.values());
+        if (args?.where?.chat_id) {
+          list = list.filter((m) => m.chat_id === args.where.chat_id);
+        }
+        list.sort((a, b) => b.sequence_number - a.sequence_number);
+        return list[0] ? { ...list[0] } : null;
+      }),
+      findUnique: vi.fn(async ({ where }: any) => {
+        const item = messagesMap.get(where.id);
+        return item ? { ...item } : null;
+      }),
+      create: vi.fn(async ({ data }: any) => {
+        const record = {
+          id: data.id,
+          chat_id: data.chat_id,
+          parent_message_id: data.parent_message_id ?? null,
+          sequence_number: data.sequence_number ?? 1,
+          role: data.role,
+          encryption_version: data.encryption_version ?? 1,
+          status: data.status ?? "ACTIVE",
+          encrypted_content: data.encrypted_content,
+          content_iv: data.content_iv,
+          content_tag: data.content_tag,
+          encrypted_tokens: data.encrypted_tokens ?? null,
+          tokens_iv: data.tokens_iv ?? null,
+          tokens_tag: data.tokens_tag ?? null,
+          encrypted_cost: data.encrypted_cost ?? null,
+          cost_iv: data.cost_iv ?? null,
+          cost_tag: data.cost_tag ?? null,
+          encrypted_metadata: data.encrypted_metadata ?? null,
+          metadata_iv: data.metadata_iv ?? null,
+          metadata_tag: data.metadata_tag ?? null,
+          created_at: new Date(),
+          updated_at: new Date(),
+        };
+        messagesMap.set(record.id, record);
+        return { ...record };
+      }),
+      delete: vi.fn(async ({ where }: any) => {
+        const item = messagesMap.get(where.id);
+        if (!item) {
+          throw new Error(`Record to delete does not exist: ${where.id}`);
+        }
+        messagesMap.delete(where.id);
+        return { ...item };
+      }),
+      deleteMany: vi.fn(async () => {
+        messagesMap.clear();
+        return { count: 1 };
+      }),
+    },
     models: {
       count: vi.fn(async () => modelsMap.size),
       findMany: vi.fn(async (args?: any) => {
@@ -234,10 +366,14 @@ export function createInMemoryPrismaMock() {
     reset: () => {
       vaultConfigRecord = null;
       apiKeysMap.clear();
+      chatsMap.clear();
+      messagesMap.clear();
       initDefaultModels();
     },
     getVaultConfig: () => vaultConfigRecord,
     getApiKeys: () => apiKeysMap,
+    getChats: () => chatsMap,
+    getMessages: () => messagesMap,
     getModels: () => modelsMap,
   };
 }

@@ -1,0 +1,110 @@
+import { getPrismaClient } from "../client.js";
+import { randomUUID } from "node:crypto";
+
+export interface CreateMessageData {
+  id?: string;
+  chat_id: string;
+  parent_message_id?: string | null;
+  sequence_number?: number;
+  role: string;
+  encryption_version?: number;
+  status?: string;
+  encrypted_content: string;
+  content_iv: string;
+  content_tag: string;
+  encrypted_tokens?: string | null;
+  tokens_iv?: string | null;
+  tokens_tag?: string | null;
+  encrypted_cost?: string | null;
+  cost_iv?: string | null;
+  cost_tag?: string | null;
+  encrypted_metadata?: string | null;
+  metadata_iv?: string | null;
+  metadata_tag?: string | null;
+}
+
+export interface MessageRecord {
+  id: string;
+  chat_id: string;
+  parent_message_id: string | null;
+  sequence_number: number;
+  role: string;
+  encryption_version: number;
+  status: string;
+  encrypted_content: string;
+  content_iv: string;
+  content_tag: string;
+  encrypted_tokens: string | null;
+  tokens_iv: string | null;
+  tokens_tag: string | null;
+  encrypted_cost: string | null;
+  cost_iv: string | null;
+  cost_tag: string | null;
+  encrypted_metadata: string | null;
+  metadata_iv: string | null;
+  metadata_tag: string | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export async function createMessageRecord(data: CreateMessageData): Promise<MessageRecord> {
+  const prisma = getPrismaClient();
+  return prisma.messages.create({
+    data: {
+      id: data.id || randomUUID(),
+      chat_id: data.chat_id,
+      parent_message_id: data.parent_message_id ?? null,
+      sequence_number: data.sequence_number ?? 1,
+      role: data.role,
+      encryption_version: data.encryption_version ?? 1,
+      status: data.status ?? "ACTIVE",
+      encrypted_content: data.encrypted_content,
+      content_iv: data.content_iv,
+      content_tag: data.content_tag,
+      encrypted_tokens: data.encrypted_tokens ?? null,
+      tokens_iv: data.tokens_iv ?? null,
+      tokens_tag: data.tokens_tag ?? null,
+      encrypted_cost: data.encrypted_cost ?? null,
+      cost_iv: data.cost_iv ?? null,
+      cost_tag: data.cost_tag ?? null,
+      encrypted_metadata: data.encrypted_metadata ?? null,
+      metadata_iv: data.metadata_iv ?? null,
+      metadata_tag: data.metadata_tag ?? null,
+    },
+  });
+}
+
+export async function getMessagesByChatId(
+  chatId: string,
+  limit?: number,
+  offset?: number,
+  sort: "asc" | "desc" = "asc"
+): Promise<MessageRecord[]> {
+  const prisma = getPrismaClient();
+  return prisma.messages.findMany({
+    where: {
+      chat_id: chatId,
+      status: "ACTIVE",
+    },
+    orderBy: { sequence_number: sort },
+    take: limit,
+    skip: offset,
+  });
+}
+
+export async function getMessageRecordById(id: string): Promise<MessageRecord | null> {
+  const prisma = getPrismaClient();
+  return prisma.messages.findUnique({
+    where: { id },
+  });
+}
+
+export async function getLatestSequenceNumber(chatId: string): Promise<number> {
+  const prisma = getPrismaClient();
+  const latest = await prisma.messages.findFirst({
+    where: { chat_id: chatId },
+    orderBy: { sequence_number: "desc" },
+    select: { sequence_number: true },
+  });
+  return latest?.sequence_number ?? 0;
+}
