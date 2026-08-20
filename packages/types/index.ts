@@ -12,3 +12,8 @@ export interface VaultInitResponse {
   recoveryPassword?: string;
   error?: string;
 }
+
+export interface VaultUnlockResponse {
+  success: boolean;
+  error?: string;
+}

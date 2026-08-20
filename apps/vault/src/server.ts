@@ -2,9 +2,9 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import crypto from "node:crypto";
 import { config } from "./config.js";
 import { getVaultStatus } from "./vault/status.js";
-import { VaultStatusResponse, VaultInitResponse } from "@ai-vault/types";
-import { createVaultConfig } from "./db/repository/vault.repository.js";
-import { generateRandomSalt, generateVaultKey, generateRecoveryPassword, deriveKey, encryptBuffer, DEFAULT_KDF_PARAMS } from "./vault/crypto.js";
+import { VaultStatusResponse, VaultInitResponse, VaultUnlockResponse } from "@ai-vault/types";
+import { createVaultConfig, getVaultConfig } from "./db/repository/vault.repository.js";
+import { generateRandomSalt, generateVaultKey, generateRecoveryPassword, deriveKey, encryptBuffer, decryptBuffer, DEFAULT_KDF_PARAMS } from "./vault/crypto.js";
 import { vaultState } from "./vault/state.js";
 
 function readJsonBody(req: IncomingMessage): Promise<any> {
@@ -155,6 +155,74 @@ export function createVaultHttpServer() {
           success: true,
           recoveryPassword,
         });
+        return;
+      }
+
+      // 4. Vault unlock endpoint (Protected)
+      if (method === "POST" && pathname === "/unlock") {
+        const dbConfig = await getVaultConfig();
+        if (!dbConfig) {
+          sendJson(res, 400, { error: "Vault is not initialized." });
+          return;
+        }
+
+        const body = await readJsonBody(req);
+        if (!body.password || typeof body.password !== "string") {
+          sendJson(res, 400, { error: "password is required and must be a string." });
+          return;
+        }
+
+        const password = body.password;
+        
+        let vaultKey: Buffer | null = null;
+        
+        // Try master password first
+        try {
+          const wrappingKey = await deriveKey(password, dbConfig.kdf_salt, {
+            memoryCost: dbConfig.kdf_memory_cost,
+            timeCost: dbConfig.kdf_time_cost,
+            parallelism: dbConfig.kdf_parallelism,
+            hashLength: 32
+          });
+          
+          vaultKey = decryptBuffer({
+            ciphertext: dbConfig.wrapped_vault_key,
+            iv: dbConfig.wrapped_vault_key_iv,
+            tag: dbConfig.wrapped_vault_key_tag
+          }, wrappingKey);
+        } catch (e) {
+          // Master password decryption failed
+        }
+        
+        // If master password fails, try recovery password
+        if (!vaultKey) {
+          try {
+            const recoveryWrappingKey = await deriveKey(password, dbConfig.recovery_kdf_salt, {
+              memoryCost: dbConfig.kdf_memory_cost,
+              timeCost: dbConfig.kdf_time_cost,
+              parallelism: dbConfig.kdf_parallelism,
+              hashLength: 32
+            });
+            
+            vaultKey = decryptBuffer({
+              ciphertext: dbConfig.wrapped_vault_key_recovery,
+              iv: dbConfig.wrapped_vault_key_recovery_iv,
+              tag: dbConfig.wrapped_vault_key_recovery_tag
+            }, recoveryWrappingKey);
+          } catch (e) {
+            // Recovery password decryption failed
+          }
+        }
+        
+        if (!vaultKey) {
+          sendJson(res, 401, { error: "Invalid password or recovery code." });
+          return;
+        }
+
+        // Successfully unlocked, load into RAM
+        vaultState.setUnlocked(vaultKey);
+
+        sendJson<VaultUnlockResponse>(res, 200, { success: true });
         return;
       }
 
