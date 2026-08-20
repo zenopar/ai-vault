@@ -3,7 +3,7 @@ import { VaultApiClient } from "@/shared/lib/vault-client";
 import { VaultUnlockResponse } from "@ai-vault/types";
 
 export async function unlockVaultService(password: string): Promise<{ success: boolean; sessionToken?: string }> {
-    const response = await VaultApiClient.sendPostRequest<VaultUnlockResponse & { sessionToken?: string }>("/unlock", {
+    const response = await VaultApiClient.sendPostRequest<VaultUnlockResponse>("/unlock", {
         password,
     });
 

@@ -225,7 +225,7 @@ export function createVaultHttpServer() {
         // Create session token and store hash in RAM
         const sessionToken = vaultState.createSession();
 
-        sendJson<VaultUnlockResponse>(res, 200, { success: true, sessionToken } as any);
+        sendJson<VaultUnlockResponse>(res, 200, { success: true, sessionToken });
         return;
       }
 

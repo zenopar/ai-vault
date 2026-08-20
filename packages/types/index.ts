@@ -16,4 +16,5 @@ export interface VaultInitResponse {
 export interface VaultUnlockResponse {
   success: boolean;
   error?: string;
+  sessionToken?: string;
 }
