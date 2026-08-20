@@ -80,19 +80,19 @@ export function deriveSubKey(masterKey: Buffer, info: Buffer, salt: Buffer = Buf
 }
 
 /**
- * Encrypts a buffer using AES-256-GCM with mandatory AAD buffer
+ * Encrypts a buffer using AES-256-GCM with mandatory non-empty AAD buffer
  */
 export function encryptBuffer(plaintext: Buffer, key: Buffer, aad: Buffer): EncryptedData {
   if (key.length !== 32) {
     throw new Error("Invalid key length. AES-256-GCM requires a 32-byte key.");
   }
+  if (!aad || aad.length === 0) {
+    throw new Error("AAD buffer cannot be empty.");
+  }
 
   const iv = crypto.randomBytes(12); // 96-bit IV is standard for GCM
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
-  
-  if (aad.length > 0) {
-    cipher.setAAD(aad);
-  }
+  cipher.setAAD(aad);
 
   const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   const tag = cipher.getAuthTag();
@@ -105,11 +105,14 @@ export function encryptBuffer(plaintext: Buffer, key: Buffer, aad: Buffer): Encr
 }
 
 /**
- * Decrypts a buffer using AES-256-GCM with mandatory AAD buffer
+ * Decrypts a buffer using AES-256-GCM with mandatory non-empty AAD buffer
  */
 export function decryptBuffer(encrypted: EncryptedData, key: Buffer, aad: Buffer): Buffer {
   if (key.length !== 32) {
     throw new Error("Invalid key length. AES-256-GCM requires a 32-byte key.");
+  }
+  if (!aad || aad.length === 0) {
+    throw new Error("AAD buffer cannot be empty.");
   }
 
   const iv = Buffer.from(encrypted.iv, "hex");
@@ -117,11 +120,7 @@ export function decryptBuffer(encrypted: EncryptedData, key: Buffer, aad: Buffer
   const ciphertext = Buffer.from(encrypted.ciphertext, "base64");
 
   const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
-  
-  if (aad.length > 0) {
-    decipher.setAAD(aad);
-  }
-
+  decipher.setAAD(aad);
   decipher.setAuthTag(tag);
 
   const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
