@@ -64,8 +64,12 @@ export async function initVault(masterPassword: string): Promise<VaultInitRespon
   // Load into RAM immediately
   vaultState.setUnlocked(vaultKey);
 
+  // Create session token and store hash in RAM
+  const sessionToken = vaultState.createSession();
+
   return {
     success: true,
     recoveryPassword,
+    sessionToken,
   };
 }

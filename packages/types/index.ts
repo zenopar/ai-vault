@@ -10,6 +10,7 @@ export interface VaultStatusResponse {
 export interface VaultInitResponse {
   success: boolean;
   recoveryPassword?: string;
+  sessionToken?: string;
   error?: string;
 }
 

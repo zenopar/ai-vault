@@ -35,6 +35,7 @@ describe("POST /init", () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.recoveryPassword).toBeDefined();
+    expect(res.body.sessionToken).toBeDefined();
 
     // Verify it was saved in the database
     const config = await prisma.vault_config.findFirst();

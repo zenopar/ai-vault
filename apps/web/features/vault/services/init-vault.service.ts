@@ -2,7 +2,7 @@ import "server-only";
 import { VaultApiClient } from "@/shared/lib/vault-client";
 import { VaultInitResponse } from "@ai-vault/types";
 
-export async function initVaultService(masterPassword: string): Promise<string | undefined> {
+export async function initVaultService(masterPassword: string): Promise<VaultInitResponse> {
     const response = await VaultApiClient.sendPostRequest<VaultInitResponse>("/init", {
         masterPassword,
     });
@@ -15,5 +15,5 @@ export async function initVaultService(masterPassword: string): Promise<string |
         throw new Error(response.data.error || "Vault initialization failed.");
     }
 
-    return response.data.recoveryPassword;
+    return response.data;
 }
