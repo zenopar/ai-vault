@@ -45,25 +45,45 @@ export interface SendMessageResult {
 
 const activeChatLocks = new Set<string>();
 
-function decryptChatMetadata(record: ChatRecord, dbKey: Buffer): Record<string, any> | null {
+interface DecryptedChatFields {
+  metadata: Record<string, any> | null;
+  inputTokens?: number;
+  outputTokens?: number;
+}
+
+function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedChatFields {
+  let metadata: Record<string, any> | null = null;
+  let inputTokens: number | undefined;
+  let outputTokens: number | undefined;
+
   if (record.encrypted_metadata && record.metadata_iv && record.metadata_tag) {
     try {
       const metaAad = buildFieldAad("chat", record.id, "metadata", record.encryption_version);
       const decMeta = decryptBuffer(
-        {
-          ciphertext: record.encrypted_metadata,
-          iv: record.metadata_iv,
-          tag: record.metadata_tag,
-        },
-        dbKey,
-        metaAad
+        { ciphertext: record.encrypted_metadata, iv: record.metadata_iv, tag: record.metadata_tag },
+        dbKey, metaAad
       );
-      return JSON.parse(decMeta.toString("utf-8"));
-    } catch (e) {
-      console.warn(`Failed to decrypt metadata for chat ${record.id}:`, e);
-    }
+      metadata = JSON.parse(decMeta.toString("utf-8"));
+    } catch (e) { console.warn(`Failed to decrypt metadata for chat ${record.id}:`, e); }
   }
-  return null;
+
+  if (record.encrypted_input_tokens && record.input_tokens_iv && record.input_tokens_tag) {
+    try {
+      const inAad = buildFieldAad("chat", record.id, "input_tokens", record.encryption_version);
+      const decIn = decryptBuffer({ ciphertext: record.encrypted_input_tokens, iv: record.input_tokens_iv, tag: record.input_tokens_tag }, dbKey, inAad);
+      inputTokens = parseInt(decIn.toString("utf-8"), 10) || undefined;
+    } catch(e) {}
+  }
+
+  if (record.encrypted_output_tokens && record.output_tokens_iv && record.output_tokens_tag) {
+    try {
+      const outAad = buildFieldAad("chat", record.id, "output_tokens", record.encryption_version);
+      const decOut = decryptBuffer({ ciphertext: record.encrypted_output_tokens, iv: record.output_tokens_iv, tag: record.output_tokens_tag }, dbKey, outAad);
+      outputTokens = parseInt(decOut.toString("utf-8"), 10) || undefined;
+    } catch(e) {}
+  }
+
+  return { metadata, inputTokens, outputTokens };
 }
 
 /**
@@ -155,13 +175,15 @@ export async function listChats(limit?: number, offset?: number): Promise<ChatMe
       console.warn(`Failed to decrypt title for chat ${record.id}:`, e);
     }
 
-    const metadata = decryptChatMetadata(record, dbKey);
+    const fields = decryptChatFields(record, dbKey);
 
     chats.push({
       id: record.id,
       title,
       status: record.status,
-      metadata,
+      metadata: fields.metadata,
+      inputTokens: fields.inputTokens,
+      outputTokens: fields.outputTokens,
       createdAt: record.created_at.toISOString(),
       updatedAt: record.updated_at.toISOString(),
     });
@@ -206,7 +228,7 @@ export async function getChat(id: string): Promise<ChatMetadata> {
     console.warn(`[getChat] Decryption failed for chat title (${record.id}):`, e);
   }
 
-  const metadata = decryptChatMetadata(record, dbKey);
+  const fields = decryptChatFields(record, dbKey);
 
   vaultState.touch();
 
@@ -214,7 +236,9 @@ export async function getChat(id: string): Promise<ChatMetadata> {
     id: record.id,
     title,
     status: record.status,
-    metadata,
+    metadata: fields.metadata,
+    inputTokens: fields.inputTokens,
+    outputTokens: fields.outputTokens,
     createdAt: record.created_at.toISOString(),
     updatedAt: record.updated_at.toISOString(),
   };
@@ -483,6 +507,9 @@ async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<S
       
       chatInputTokens += (aiResult.inputTokens || 0);
       chatOutputTokens += (aiResult.outputTokens || 0);
+      
+      chat.inputTokens = chatInputTokens;
+      chat.outputTokens = chatOutputTokens;
       
       const inAad = buildFieldAad("chat", chat.id, "input_tokens", chatRecord.encryption_version);
       const encIn = encryptBuffer(Buffer.from(chatInputTokens.toString(), "utf-8"), dbKey, inAad);

@@ -294,6 +294,20 @@ export function ChatInterface({ initialChats, initialKeys }: ChatInterfaceProps)
 
         {/* Right Column: Chat Thread & Input */}
         <div className="md:col-span-2 bg-white rounded-lg shadow-md border border-gray-100 p-6 flex flex-col h-[520px]">
+          {/* Chat Header with Totals */}
+          {activeChatId && (
+            <div className="mb-3 pb-3 border-b border-gray-100 flex justify-between items-center text-xs text-gray-500">
+              <span className="font-semibold text-gray-700 truncate mr-4">
+                {chats.find((c) => c.id === activeChatId)?.title || "Untitled Chat"}
+              </span>
+              <div className="font-mono flex items-center gap-2 whitespace-nowrap">
+                <span>Total in: <strong className="text-gray-700 font-bold">{chats.find((c) => c.id === activeChatId)?.inputTokens ?? 0}</strong></span>
+                <span>•</span>
+                <span>Total out: <strong className="text-gray-700 font-bold">{chats.find((c) => c.id === activeChatId)?.outputTokens ?? 0}</strong></span>
+              </div>
+            </div>
+          )}
+
           {/* Messages Area */}
           <div className="flex-1 overflow-y-auto space-y-4 p-2">
             {isLoadingMessages ? (
