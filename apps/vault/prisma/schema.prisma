@@ -57,3 +57,70 @@ model models {
   @@index([provider], map: "idx_models_provider")
   @@schema("vault")
 }
+
+model chats {
+  id                      String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  encryption_version      Int        @default(1)
+  status                  String     @default("ACTIVE") @db.VarChar(32)
+  encrypted_title         String
+  title_iv                String     @db.VarChar(32)
+  title_tag               String     @db.VarChar(32)
+  encrypted_metadata      String?
+  metadata_iv             String?    @db.VarChar(32)
+  metadata_tag            String?    @db.VarChar(32)
+  encrypted_input_tokens  String?
+  input_tokens_iv         String?    @db.VarChar(32)
+  input_tokens_tag        String?    @db.VarChar(32)
+  encrypted_output_tokens String?
+  output_tokens_iv        String?    @db.VarChar(32)
+  output_tokens_tag       String?    @db.VarChar(32)
+  encrypted_input_cost    String?
+  input_cost_iv           String?    @db.VarChar(32)
+  input_cost_tag          String?    @db.VarChar(32)
+  encrypted_output_cost   String?
+  output_cost_iv          String?    @db.VarChar(32)
+  output_cost_tag         String?    @db.VarChar(32)
+  encrypted_total_cost    String?
+  total_cost_iv           String?    @db.VarChar(32)
+  total_cost_tag          String?    @db.VarChar(32)
+  created_at              DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime   @default(now()) @db.Timestamptz(6)
+  messages                messages[]
+
+  @@index([created_at], map: "idx_chats_created_at")
+  @@index([status], map: "idx_chats_status")
+  @@schema("vault")
+}
+
+model messages {
+  id                 String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  chat_id            String     @db.Uuid
+  parent_message_id  String?    @db.Uuid
+  sequence_number    Int        @default(1)
+  role               String     @db.VarChar(32)
+  encryption_version Int        @default(1)
+  status             String     @default("ACTIVE") @db.VarChar(32)
+  encrypted_content  String
+  content_iv         String     @db.VarChar(32)
+  content_tag        String     @db.VarChar(32)
+  encrypted_tokens   String?
+  tokens_iv          String?    @db.VarChar(32)
+  tokens_tag         String?    @db.VarChar(32)
+  encrypted_cost     String?
+  cost_iv            String?    @db.VarChar(32)
+  cost_tag           String?    @db.VarChar(32)
+  encrypted_metadata String?
+  metadata_iv        String?    @db.VarChar(32)
+  metadata_tag       String?    @db.VarChar(32)
+  created_at         DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime   @default(now()) @db.Timestamptz(6)
+  chats              chats      @relation(fields: [chat_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  messages           messages?  @relation("messagesTomessages", fields: [parent_message_id], references: [id], onUpdate: NoAction)
+  other_messages     messages[] @relation("messagesTomessages")
+
+  @@index([chat_id], map: "idx_messages_chat_id")
+  @@index([chat_id, sequence_number], map: "idx_messages_chat_sequence")
+  @@index([created_at], map: "idx_messages_created_at")
+  @@index([parent_message_id], map: "idx_messages_parent_id")
+  @@schema("vault")
+}
