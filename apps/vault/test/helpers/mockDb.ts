@@ -4,7 +4,7 @@ import * as clientModule from "../../src/db/client.js";
 const TEST_MOCK_MODELS = [
   // Google Gemini
   {
-    id: "model-google-gemini-3.7-flash",
+    id: "00000000-0000-4000-8000-000000000001",
     provider: "google",
     name: "gemini-3.7-flash",
     display_name: "Gemini 3.7 Flash",
@@ -13,7 +13,7 @@ const TEST_MOCK_MODELS = [
     is_active: true,
   },
   {
-    id: "model-google-gemini-3.6-flash",
+    id: "00000000-0000-4000-8000-000000000002",
     provider: "google",
     name: "gemini-3.6-flash",
     display_name: "Gemini 3.6 Flash",
@@ -23,7 +23,7 @@ const TEST_MOCK_MODELS = [
   },
   // OpenAI
   {
-    id: "model-openai-gpt-5.6-sol",
+    id: "00000000-0000-4000-8000-000000000003",
     provider: "openai",
     name: "gpt-5.6-sol",
     display_name: "GPT-5.6 Sol",
@@ -32,7 +32,7 @@ const TEST_MOCK_MODELS = [
     is_active: true,
   },
   {
-    id: "model-openai-o3",
+    id: "00000000-0000-4000-8000-000000000004",
     provider: "openai",
     name: "o3",
     display_name: "o3",
@@ -42,7 +42,7 @@ const TEST_MOCK_MODELS = [
   },
   // Anthropic Claude
   {
-    id: "model-anthropic-claude-fable-5",
+    id: "00000000-0000-4000-8000-000000000005",
     provider: "anthropic",
     name: "claude-fable-5",
     display_name: "Claude Fable 5",
@@ -51,7 +51,7 @@ const TEST_MOCK_MODELS = [
     is_active: true,
   },
   {
-    id: "model-anthropic-claude-sonnet-5",
+    id: "00000000-0000-4000-8000-000000000006",
     provider: "anthropic",
     name: "claude-sonnet-5",
     display_name: "Claude Sonnet 5",
@@ -61,7 +61,7 @@ const TEST_MOCK_MODELS = [
   },
   // DeepSeek
   {
-    id: "model-deepseek-v4-pro",
+    id: "00000000-0000-4000-8000-000000000007",
     provider: "deepseek",
     name: "deepseek-v4-pro",
     display_name: "DeepSeek V4 Pro",
@@ -71,7 +71,7 @@ const TEST_MOCK_MODELS = [
   },
   // Groq
   {
-    id: "model-groq-gpt-oss-120b",
+    id: "00000000-0000-4000-8000-000000000008",
     provider: "groq",
     name: "openai/gpt-oss-120b",
     display_name: "GPT-OSS 120B (Groq)",

@@ -123,7 +123,7 @@ describe("AI API Keys API (Unit Tests / In-Memory Mock DB)", () => {
     // Create a second record with swapped ciphertext
     await prisma.ai_api_keys.create({
       data: {
-        id: "swapped-id-12345",
+        id: "11111111-2222-3333-4444-555555555555",
         provider: "anthropic",
         name: "Swapped",
         encrypted_key: dbRecord!.encrypted_key,
@@ -134,10 +134,10 @@ describe("AI API Keys API (Unit Tests / In-Memory Mock DB)", () => {
     });
 
     // Decrypting swapped-id with same ciphertext should fail because AAD binds to record ID
-    await expect(getDecryptedApiKey("swapped-id-12345")).rejects.toThrow();
+    await expect(getDecryptedApiKey("11111111-2222-3333-4444-555555555555")).rejects.toThrow();
 
     // Clean up the swapped test record immediately
-    await prisma.ai_api_keys.delete({ where: { id: "swapped-id-12345" } });
+    await prisma.ai_api_keys.delete({ where: { id: "11111111-2222-3333-4444-555555555555" } });
 
     // 7. Delete key via RESTful DELETE /keys/:id (requires session token)
     const deleteRes = await request(server)

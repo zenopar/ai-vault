@@ -8,7 +8,7 @@ datasource db {
 }
 
 model vault_config {
-  id                             String   @id @db.VarChar(36)
+  id                             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   version                        Int      @default(1)
   status                         String   @default("INITIALIZED") @db.VarChar(32)
   kdf_algorithm                  String   @default("argon2id") @db.VarChar(32)
@@ -30,7 +30,7 @@ model vault_config {
 }
 
 model ai_api_keys {
-  id            String   @id @db.VarChar(36)
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   provider      String   @db.VarChar(64)
   name          String   @db.VarChar(128)
   encrypted_key String
@@ -44,7 +44,7 @@ model ai_api_keys {
 }
 
 model models {
-  id             String   @id @db.VarChar(36)
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   provider       String   @db.VarChar(64)
   name           String   @db.VarChar(128)
   display_name   String   @db.VarChar(128)
@@ -54,6 +54,7 @@ model models {
   created_at     DateTime @default(now()) @db.Timestamptz(6)
   updated_at     DateTime @default(now()) @db.Timestamptz(6)
 
+  @@unique([provider, name], map: "uq_models_provider_name")
   @@index([provider], map: "idx_models_provider")
   @@schema("vault")
 }
