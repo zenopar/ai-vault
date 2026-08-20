@@ -1,9 +1,16 @@
 import { getVaultStatus } from "../../features/vault/services/vault-status.service";
 import { redirect } from "next/navigation";
+import { verifySession } from "../../shared/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function AppDashboard() {
+  const isValidSession = await verifySession();
+  
+  if (!isValidSession) {
+    redirect("/");
+  }
+
   const status = await getVaultStatus();
 
   if (status.status !== "UNLOCKED") {

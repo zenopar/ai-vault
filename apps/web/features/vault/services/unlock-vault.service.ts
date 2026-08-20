@@ -2,8 +2,8 @@ import "server-only";
 import { VaultApiClient } from "@/shared/lib/vault-client";
 import { VaultUnlockResponse } from "@ai-vault/types";
 
-export async function unlockVaultService(password: string): Promise<boolean> {
-    const response = await VaultApiClient.sendPostRequest<VaultUnlockResponse>("/unlock", {
+export async function unlockVaultService(password: string): Promise<{ success: boolean; sessionToken?: string }> {
+    const response = await VaultApiClient.sendPostRequest<VaultUnlockResponse & { sessionToken?: string }>("/unlock", {
         password,
     });
 
@@ -15,5 +15,8 @@ export async function unlockVaultService(password: string): Promise<boolean> {
         throw new Error(response.data.error || "Invalid password or recovery code.");
     }
 
-    return response.data.success;
+    return { 
+        success: response.data.success, 
+        sessionToken: response.data.sessionToken 
+    };
 }

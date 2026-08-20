@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { checkRateLimit } from "@/shared/lib/rate-limit";
 import { getClientIp } from "@/shared/lib/get-ip";
 import { unlockVaultService } from "../services/unlock-vault.service";
+import { createSession } from "@/shared/lib/session";
 
 export type UnlockVaultActionResult = {
   success: boolean;
@@ -25,8 +26,11 @@ export async function unlockVaultAction(formData: FormData): Promise<UnlockVault
   }
 
   let success = false;
+  let sessionToken: string | undefined = undefined;
   try {
-    success = await unlockVaultService(password);
+    const result = await unlockVaultService(password);
+    success = result.success;
+    sessionToken = result.sessionToken;
   } catch (error: unknown) {
     console.error("[unlockVaultAction] Error:", error);
     
@@ -37,7 +41,8 @@ export async function unlockVaultAction(formData: FormData): Promise<UnlockVault
     return { success: false, error: "An unexpected error occurred." };
   }
 
-  if (success) {
+  if (success && sessionToken) {
+    await createSession(sessionToken);
     // redirect throws a NEXT_REDIRECT error under the hood, so it must be outside the try/catch
     redirect("/app");
   }

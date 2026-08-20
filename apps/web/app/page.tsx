@@ -2,6 +2,7 @@ import { getVaultStatus } from "../features/vault/services/vault-status.service"
 import { InitVaultForm } from "../features/vault/components/init-vault-form";
 import { UnlockVaultForm } from "../features/vault/components/unlock-vault-form";
 import { redirect } from "next/navigation";
+import { verifySession } from "../shared/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -19,13 +20,16 @@ export default async function Home() {
     );
   }
 
-  // If the vault is fully unlocked in RAM, redirect straight to the app
+  // If the vault is fully unlocked in RAM, and the user has a valid session, redirect straight to the app
   if (status.status === "UNLOCKED") {
-    redirect("/app");
+    const isValidSession = await verifySession();
+    if (isValidSession) {
+      redirect("/app");
+    }
   }
 
-  // If the vault has keys but is locked in RAM, show the unlock form
-  if (status.status === "LOCKED") {
+  // If the vault has keys but is locked in RAM, or if they just lack a session, show the unlock form
+  if (status.status === "LOCKED" || status.status === "UNLOCKED") {
     return (
       <div className="min-h-screen bg-gray-50 p-4">
         <UnlockVaultForm />
