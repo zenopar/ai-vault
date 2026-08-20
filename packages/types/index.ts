@@ -19,3 +19,30 @@ export interface VaultUnlockResponse {
   error?: string;
   sessionToken?: string;
 }
+
+export interface AiApiKeyMetadata {
+  id: string;
+  provider: string;
+  name: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AddApiKeyRequest {
+  provider: string;
+  name: string;
+  apiKey: string;
+}
+
+export interface AddApiKeyResponse {
+  success: boolean;
+  key?: AiApiKeyMetadata;
+  error?: string;
+}
+
+export interface ListApiKeysResponse {
+  success: boolean;
+  keys?: AiApiKeyMetadata[];
+  error?: string;
+}

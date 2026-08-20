@@ -4,8 +4,21 @@ import { config } from "./config.js";
 import { getVaultStatus } from "./vault/status.js";
 import { initVault, VaultAlreadyInitializedError } from "./vault/init.js";
 import { unlockVault, VaultNotInitializedError, InvalidCredentialsError } from "./vault/unlock.js";
+import { 
+  addApiKey, 
+  listApiKeys, 
+  removeApiKey, 
+  VaultLockedError, 
+  ApiKeyNotFoundError 
+} from "./vault/keys.js";
 import { vaultState } from "./vault/state.js";
-import { VaultStatusResponse, VaultInitResponse, VaultUnlockResponse } from "@ai-vault/types";
+import { 
+  VaultStatusResponse, 
+  VaultInitResponse, 
+  VaultUnlockResponse,
+  AddApiKeyResponse,
+  ListApiKeysResponse
+} from "@ai-vault/types";
 
 function readJsonBody<T = any>(req: IncomingMessage): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -40,8 +53,8 @@ function sendJson<T = unknown>(res: ServerResponse, statusCode: number, data: T)
   res.writeHead(statusCode, {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-vault-secret",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-vault-secret, x-session-token",
   });
   res.end(json);
 }
@@ -64,6 +77,21 @@ function authenticateIpcRequest(req: IncomingMessage): boolean {
   return true;
 }
 
+function authenticateSessionToken(req: IncomingMessage, body?: { sessionToken?: string }): boolean {
+  const token = 
+    (typeof req.headers["x-session-token"] === "string" ? req.headers["x-session-token"] : null) ||
+    body?.sessionToken ||
+    (typeof req.headers["authorization"] === "string" && req.headers["x-vault-secret"]
+      ? req.headers["authorization"].replace("Bearer ", "")
+      : null);
+
+  if (!token) {
+    return false;
+  }
+
+  return vaultState.verifySession(token);
+}
+
 export function createVaultHttpServer() {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
@@ -74,8 +102,8 @@ export function createVaultHttpServer() {
     if (method === "OPTIONS") {
       res.writeHead(204, {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, x-vault-secret",
+        "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, x-vault-secret, x-session-token",
       });
       res.end();
       return;
@@ -140,6 +168,68 @@ export function createVaultHttpServer() {
         return;
       }
 
+      // 8. Add and encrypt AI API key
+      if (method === "POST" && pathname === "/keys") {
+        const body = await readJsonBody<{ provider?: string; name?: string; apiKey?: string; sessionToken?: string }>(req);
+
+        if (!authenticateSessionToken(req, body)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+
+        if (!body.provider || typeof body.provider !== "string" || !body.provider.trim()) {
+          sendJson(res, 400, { error: "provider is required and must be a non-empty string." });
+          return;
+        }
+        if (!body.name || typeof body.name !== "string" || !body.name.trim()) {
+          sendJson(res, 400, { error: "name is required and must be a non-empty string." });
+          return;
+        }
+        if (!body.apiKey || typeof body.apiKey !== "string" || !body.apiKey.trim()) {
+          sendJson(res, 400, { error: "apiKey is required and must be a non-empty string." });
+          return;
+        }
+
+        const key = await addApiKey({
+          provider: body.provider,
+          name: body.name,
+          apiKey: body.apiKey,
+        });
+        sendJson<AddApiKeyResponse>(res, 201, { success: true, key });
+        return;
+      }
+
+      // 9. List all AI API keys (metadata only)
+      if (method === "GET" && pathname === "/keys") {
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+
+        const keys = await listApiKeys();
+        sendJson<ListApiKeysResponse>(res, 200, { success: true, keys });
+        return;
+      }
+
+      // 10. Delete AI API key by ID
+      if (method === "DELETE" && pathname.startsWith("/keys/")) {
+        const id = pathname.replace(/^\/keys\//, "").trim();
+
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+
+        if (!id) {
+          sendJson(res, 400, { error: "Key ID is required in URL path (/keys/:id)." });
+          return;
+        }
+
+        await removeApiKey(id);
+        sendJson(res, 200, { success: true });
+        return;
+      }
+
       // Route not found
       sendJson(res, 404, { error: `Route ${method} ${pathname} not found` });
     } catch (err: unknown) {
@@ -150,6 +240,16 @@ export function createVaultHttpServer() {
 
       if (err instanceof InvalidCredentialsError) {
         sendJson(res, 401, { error: err.message });
+        return;
+      }
+
+      if (err instanceof VaultLockedError) {
+        sendJson(res, 403, { error: err.message });
+        return;
+      }
+
+      if (err instanceof ApiKeyNotFoundError) {
+        sendJson(res, 404, { error: err.message });
         return;
       }
 

@@ -10,6 +10,8 @@
     "start": "node dist/server.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "add-key": "tsx scripts/add-key.ts",
+    "list-keys": "tsx scripts/list-keys.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio"

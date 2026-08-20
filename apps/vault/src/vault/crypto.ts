@@ -65,10 +65,21 @@ export async function deriveKey(password: string, saltHex: string, params: KdfPa
   return key;
 }
 
+export const HKDF_INFO_DB = "ai-vault/db/v1";
+export const HKDF_INFO_FILES = "ai-vault/files/v1";
+export const HKDF_INFO_SECRETS = "ai-vault/secrets/v1";
+
 /**
- * Encrypts a buffer using AES-256-GCM
+ * Derives a sub-key from a master key using HKDF-SHA256
  */
-export function encryptBuffer(plaintext: Buffer, key: Buffer): EncryptedData {
+export function deriveSubKey(masterKey: Buffer, info: string, salt: Buffer = Buffer.alloc(0), length = 32): Buffer {
+  return Buffer.from(crypto.hkdfSync("sha256", masterKey, salt, Buffer.from(info, "utf-8"), length));
+}
+
+/**
+ * Encrypts a buffer using AES-256-GCM with optional AAD
+ */
+export function encryptBuffer(plaintext: Buffer, key: Buffer, aad?: Buffer | string): EncryptedData {
   if (key.length !== 32) {
     throw new Error("Invalid key length. AES-256-GCM requires a 32-byte key.");
   }
@@ -76,6 +87,11 @@ export function encryptBuffer(plaintext: Buffer, key: Buffer): EncryptedData {
   const iv = crypto.randomBytes(12); // 96-bit IV is standard for GCM
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
   
+  if (aad) {
+    const aadBuffer = typeof aad === "string" ? Buffer.from(aad, "utf-8") : aad;
+    cipher.setAAD(aadBuffer);
+  }
+
   const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   const tag = cipher.getAuthTag();
 
@@ -87,9 +103,9 @@ export function encryptBuffer(plaintext: Buffer, key: Buffer): EncryptedData {
 }
 
 /**
- * Decrypts a buffer using AES-256-GCM
+ * Decrypts a buffer using AES-256-GCM with optional AAD
  */
-export function decryptBuffer(encrypted: EncryptedData, key: Buffer): Buffer {
+export function decryptBuffer(encrypted: EncryptedData, key: Buffer, aad?: Buffer | string): Buffer {
   if (key.length !== 32) {
     throw new Error("Invalid key length. AES-256-GCM requires a 32-byte key.");
   }
@@ -99,8 +115,15 @@ export function decryptBuffer(encrypted: EncryptedData, key: Buffer): Buffer {
   const ciphertext = Buffer.from(encrypted.ciphertext, "base64");
 
   const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+  
+  if (aad) {
+    const aadBuffer = typeof aad === "string" ? Buffer.from(aad, "utf-8") : aad;
+    decipher.setAAD(aadBuffer);
+  }
+
   decipher.setAuthTag(tag);
 
   const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
   return decrypted;
 }
+

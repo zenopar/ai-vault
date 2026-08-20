@@ -1,0 +1,143 @@
+import { describe, it, expect, beforeEach, afterAll, beforeAll } from "vitest";
+import { createVaultHttpServer } from "../src/server.js";
+import { getPrismaClient } from "../src/db/client.js";
+import { config } from "../src/config.js";
+import { vaultState } from "../src/vault/state.js";
+import { initVault } from "../src/vault/init.js";
+import { getDecryptedApiKey } from "../src/vault/keys.js";
+import request from "supertest";
+
+describe("AI API Keys API", () => {
+  const server = createVaultHttpServer();
+  const prisma = getPrismaClient();
+
+  beforeAll(() => {
+    config.ipcSecret = "test-secret";
+  });
+
+  beforeEach(async () => {
+    // Reset state & DB
+    vaultState.lock();
+    await prisma.ai_api_keys.deleteMany();
+    await prisma.vault_config.deleteMany();
+  });
+
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  it("should return 401 if missing IPC secret", async () => {
+    const res = await request(server)
+      .post("/keys")
+      .send({ provider: "openai", name: "Test Key", apiKey: "sk-12345" });
+    expect(res.status).toBe(401);
+    expect(res.body.error).toContain("IPC Secret");
+  });
+
+  it("should return 401 if missing session token", async () => {
+    await initVault("SecureMasterPassword123!");
+
+    const res = await request(server)
+      .post("/keys")
+      .set("x-vault-secret", "test-secret")
+      .send({ provider: "openai", name: "Test Key", apiKey: "sk-12345" });
+    expect(res.status).toBe(401);
+    expect(res.body.error).toContain("session token");
+  });
+
+  it("should return 401 if session token is invalid", async () => {
+    await initVault("SecureMasterPassword123!");
+
+    const res = await request(server)
+      .post("/keys")
+      .set("x-vault-secret", "test-secret")
+      .set("x-session-token", "invalid-token-12345")
+      .send({ provider: "openai", name: "Test Key", apiKey: "sk-12345" });
+    expect(res.status).toBe(401);
+    expect(res.body.error).toContain("session token");
+  });
+
+  it("should successfully encrypt and store API key with valid session token", async () => {
+    // 1. Initialize vault and get session token
+    const initResult = await initVault("SecureMasterPassword123!");
+    expect(initResult.sessionToken).toBeDefined();
+    const sessionToken = initResult.sessionToken!;
+
+    // 2. Add API key
+    const rawApiKey = "sk-proj-super-secret-openai-api-key";
+    const res = await request(server)
+      .post("/keys")
+      .set("x-vault-secret", "test-secret")
+      .set("x-session-token", sessionToken)
+      .send({
+        provider: "openai",
+        name: "My OpenAI Key",
+        apiKey: rawApiKey,
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.key).toBeDefined();
+    expect(res.body.key.provider).toBe("openai");
+    expect(res.body.key.name).toBe("My OpenAI Key");
+    expect(res.body.key.id).toBeDefined();
+
+    const keyId = res.body.key.id;
+
+    // 3. Verify in DB that raw key is NOT stored in plaintext
+    const dbRecord = await prisma.ai_api_keys.findUnique({ where: { id: keyId } });
+    expect(dbRecord).toBeDefined();
+    expect(dbRecord?.encrypted_key).toBeDefined();
+    expect(dbRecord?.encrypted_key).not.toBe(rawApiKey);
+    expect(dbRecord?.iv).toBeDefined();
+    expect(dbRecord?.tag).toBeDefined();
+
+    // 4. List keys (requires session token)
+    const listUnauthorized = await request(server)
+      .get("/keys")
+      .set("x-vault-secret", "test-secret");
+    expect(listUnauthorized.status).toBe(401);
+
+    const listRes = await request(server)
+      .get("/keys")
+      .set("x-vault-secret", "test-secret")
+      .set("x-session-token", sessionToken);
+
+    expect(listRes.status).toBe(200);
+    expect(listRes.body.keys).toHaveLength(1);
+    expect(listRes.body.keys[0].name).toBe("My OpenAI Key");
+
+    // 5. Decrypt key internally (for use by Vault Service when calling AI providers)
+    const decryptedKey = await getDecryptedApiKey(keyId);
+    expect(decryptedKey).toBe(rawApiKey);
+
+    // 6. Verify that tampering with DB records (AAD mismatch or corrupted ciphertext/tag) fails decryption
+    // Create a second record with swapped ciphertext
+    await prisma.ai_api_keys.create({
+      data: {
+        id: "swapped-id-12345",
+        provider: "anthropic",
+        name: "Swapped",
+        encrypted_key: dbRecord!.encrypted_key,
+        iv: dbRecord!.iv,
+        tag: dbRecord!.tag,
+        is_active: true,
+      },
+    });
+
+    // Decrypting swapped-id with same ciphertext should fail because AAD binds to record ID
+    await expect(getDecryptedApiKey("swapped-id-12345")).rejects.toThrow();
+
+    // 7. Delete key via RESTful DELETE /keys/:id (requires session token)
+    const deleteRes = await request(server)
+      .delete(`/keys/${keyId}`)
+      .set("x-vault-secret", "test-secret")
+      .set("x-session-token", sessionToken);
+
+    expect(deleteRes.status).toBe(200);
+
+    const deletedRecord = await prisma.ai_api_keys.findUnique({ where: { id: keyId } });
+    expect(deletedRecord).toBeNull();
+  });
+});
+
