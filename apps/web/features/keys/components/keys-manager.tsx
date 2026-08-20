@@ -27,7 +27,7 @@ export function KeysManager({ initialKeys }: KeysManagerProps) {
     else setName("Custom AI Key");
   };
 
-  const handleAddKey = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAddKey = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
 
