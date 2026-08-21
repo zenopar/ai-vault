@@ -44,15 +44,17 @@ model ai_api_keys {
 }
 
 model models {
-  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  provider       String   @db.VarChar(64)
-  name           String   @db.VarChar(128)
-  display_name   String   @db.VarChar(128)
-  description    String?  @db.VarChar(255)
-  context_window Int?
-  is_active      Boolean  @default(true)
-  created_at     DateTime @default(now()) @db.Timestamptz(6)
-  updated_at     DateTime @default(now()) @db.Timestamptz(6)
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  provider            String   @db.VarChar(64)
+  name                String   @db.VarChar(128)
+  display_name        String   @db.VarChar(128)
+  description         String?  @db.VarChar(255)
+  context_window      Int?
+  input_price_per_1m  Decimal? @db.Decimal(10, 4)
+  output_price_per_1m Decimal? @db.Decimal(10, 4)
+  is_active           Boolean  @default(true)
+  created_at          DateTime @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime @default(now()) @db.Timestamptz(6)
 
   @@unique([provider, name], map: "uq_models_provider_name")
   @@index([provider], map: "idx_models_provider")

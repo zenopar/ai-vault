@@ -58,6 +58,8 @@ CREATE TABLE IF NOT EXISTS "vault"."models" (
     "display_name" VARCHAR(128) NOT NULL,          -- User-friendly label (e.g. 'Gemini 2.5 Pro')
     "description" VARCHAR(255),                    -- Capabilities / description
     "context_window" INT,                          -- Max token window limit
+    "input_price_per_1m" DECIMAL(10, 4),           -- Price for 1M input tokens
+    "output_price_per_1m" DECIMAL(10, 4),          -- Price for 1M output tokens
     "is_active" BOOLEAN NOT NULL DEFAULT true,
 
     -- Timestamps
@@ -218,36 +220,36 @@ EXECUTE FUNCTION "vault"."set_updated_at"();
 
 
 -- Seed default models for common providers
-INSERT INTO "vault"."models" ("provider", "name", "display_name", "description", "context_window", "is_active")
+INSERT INTO "vault"."models" ("provider", "name", "display_name", "description", "context_window", "input_price_per_1m", "output_price_per_1m", "is_active")
 VALUES
     -- Google Gemini (Gemini 3 Series & Active Versions)
-    ('google', 'gemini-3.7-flash', 'Gemini 3.7 Flash', 'Google latest flagship workhorse model for coding, agents, and complex reasoning', 1048576, true),
-    ('google', 'gemini-3.6-flash', 'Gemini 3.6 Flash', 'High-efficiency model optimized for agentic planning and tasks', 1048576, true),
-    ('google', 'gemini-3.5-flash', 'Gemini 3.5 Flash', 'Fast and versatile multimodal model for production workloads', 1048576, true),
-    ('google', 'gemini-3.5-flash-lite', 'Gemini 3.5 Flash-Lite', 'Cost-sensitive high-throughput automation model', 1048576, true),
-    ('google', 'gemini-3.1-pro-preview', 'Gemini 3.1 Pro Preview', 'High-end reasoning flagship for complex domain analysis', 1048576, true),
+    ('google', 'gemini-3.7-flash', 'Gemini 3.7 Flash', 'Google latest flagship workhorse model for coding, agents, and complex reasoning', 1048576, 0.75, 3.75, true),
+    ('google', 'gemini-3.6-flash', 'Gemini 3.6 Flash', 'High-efficiency model optimized for agentic planning and tasks', 1048576, 1.50, 7.50, true),
+    ('google', 'gemini-3.5-flash', 'Gemini 3.5 Flash', 'Fast and versatile multimodal model for production workloads', 1048576, 1.50, 9.00, true),
+    ('google', 'gemini-3.5-flash-lite', 'Gemini 3.5 Flash-Lite', 'Cost-sensitive high-throughput automation model', 1048576, 0.30, 2.50, true),
+    ('google', 'gemini-3.1-pro-preview', 'Gemini 3.1 Pro Preview', 'High-end reasoning flagship for complex domain analysis', 1048576, 2.00, 12.00, true),
     
     -- OpenAI (GPT-5.6 Series & o-Series Reasoning)
-    ('openai', 'gpt-5.6-sol', 'GPT-5.6 Sol', 'OpenAI flagship frontier model for complex reasoning, coding, and agents', 200000, true),
-    ('openai', 'gpt-5.6-terra', 'GPT-5.6 Terra', 'Balanced enterprise model with high intelligence and cost-efficiency', 200000, true),
-    ('openai', 'gpt-5.6-luna', 'GPT-5.6 Luna', 'Fast, cost-efficient model for high-volume low-latency workloads', 200000, true),
-    ('openai', 'o3', 'o3', 'Advanced deep reasoning model for hard STEM, math, and logic problems', 200000, true),
-    ('openai', 'gpt-oss-120b', 'GPT-OSS 120B', 'High-capacity open weights model for complex context-heavy workloads', 128000, true),
-    ('openai', 'gpt-oss-20b', 'GPT-OSS 20B', 'Compact, efficient open weights model for general application', 128000, true),
+    ('openai', 'gpt-5.6-sol', 'GPT-5.6 Sol', 'OpenAI flagship frontier model for complex reasoning, coding, and agents', 200000, 5.00, 30.00, true),
+    ('openai', 'gpt-5.6-terra', 'GPT-5.6 Terra', 'Balanced enterprise model with high intelligence and cost-efficiency', 200000, 2.00, 12.00, true),
+    ('openai', 'gpt-5.6-luna', 'GPT-5.6 Luna', 'Fast, cost-efficient model for high-volume low-latency workloads', 200000, 0.20, 1.20, true),
+    ('openai', 'o3', 'o3', 'Advanced deep reasoning model for hard STEM, math, and logic problems', 200000, 2.00, 8.00, true),
+    ('openai', 'gpt-oss-120b', 'GPT-OSS 120B', 'High-capacity open weights model for complex context-heavy workloads', 128000, 0.35, 0.75, true),
+    ('openai', 'gpt-oss-20b', 'GPT-OSS 20B', 'Compact, efficient open weights model for general application', 128000, 0.05, 0.20, true),
 
     -- Anthropic Claude (Claude 5 & Claude 4.5 Series)
-    ('anthropic', 'claude-fable-5', 'Claude Fable 5', 'Anthropic most capable flagship model for complex agentic workflows', 200000, true),
-    ('anthropic', 'claude-opus-5', 'Claude Opus 5', 'Enterprise-grade reasoning and complex coding flagship', 200000, true),
-    ('anthropic', 'claude-sonnet-5', 'Claude Sonnet 5', 'Standard balanced model offering high speed and frontier intelligence', 200000, true),
-    ('anthropic', 'claude-haiku-4.5', 'Claude Haiku 4.5', 'Ultra-fast lightweight model for daily intelligence and near-frontier speed', 200000, true),
+    ('anthropic', 'claude-fable-5', 'Claude Fable 5', 'Anthropic most capable flagship model for complex agentic workflows', 200000, 10.00, 50.00, true),
+    ('anthropic', 'claude-opus-5', 'Claude Opus 5', 'Enterprise-grade reasoning and complex coding flagship', 200000, 5.00, 25.00, true),
+    ('anthropic', 'claude-sonnet-5', 'Claude Sonnet 5', 'Standard balanced model offering high speed and frontier intelligence', 200000, 3.00, 15.00, true),
+    ('anthropic', 'claude-haiku-4.5', 'Claude Haiku 4.5', 'Ultra-fast lightweight model for daily intelligence and near-frontier speed', 200000, 1.00, 5.00, true),
 
     -- DeepSeek (DeepSeek V4 Series)
-    ('deepseek', 'deepseek-v4-pro', 'DeepSeek V4 Pro', 'Flagship high-capability reasoning and agentic model with thinking mode', 128000, true),
-    ('deepseek', 'deepseek-v4-flash', 'DeepSeek V4 Flash', 'Fast and cost-sensitive model for high-throughput tasks', 128000, true),
+    ('deepseek', 'deepseek-v4-pro', 'DeepSeek V4 Pro', 'Flagship high-capability reasoning and agentic model with thinking mode', 128000, 0.44, 0.88, true),
+    ('deepseek', 'deepseek-v4-flash', 'DeepSeek V4 Flash', 'Fast and cost-sensitive model for high-throughput tasks', 128000, 0.14, 0.28, true),
 
     -- Groq (LPU Ultra-Fast Inference)
-    ('groq', 'openai/gpt-oss-120b', 'GPT-OSS 120B (Groq)', 'Ultra-fast 120B reasoning and tool-calling model on Groq LPU', 128000, true),
-    ('groq', 'openai/gpt-oss-20b', 'GPT-OSS 20B (Groq)', 'Sub-second lightweight reasoning model on Groq LPU', 128000, true),
-    ('groq', 'qwen/qwen3.6-27b', 'Qwen 3.6 27B (Groq)', 'High-speed multilingual reasoning model on Groq LPU', 128000, true),
-    ('groq', 'groq/compound', 'Groq Compound', 'Compound system with integrated agent tools served via Groq LPU', 128000, true)
+    ('groq', 'openai/gpt-oss-120b', 'GPT-OSS 120B (Groq)', 'Ultra-fast 120B reasoning and tool-calling model on Groq LPU', 128000, 0.35, 0.75, true),
+    ('groq', 'openai/gpt-oss-20b', 'GPT-OSS 20B (Groq)', 'Sub-second lightweight reasoning model on Groq LPU', 128000, 0.05, 0.20, true),
+    ('groq', 'qwen/qwen3.6-27b', 'Qwen 3.6 27B (Groq)', 'High-speed multilingual reasoning model on Groq LPU', 128000, 0.15, 0.60, true),
+    ('groq', 'groq/compound', 'Groq Compound', 'Compound system with integrated agent tools served via Groq LPU', 128000, 0.50, 1.50, true)
 ON CONFLICT ("provider", "name") DO NOTHING;
