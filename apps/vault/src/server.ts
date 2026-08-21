@@ -81,17 +81,26 @@ function authenticateIpcRequest(req: IncomingMessage): boolean {
   const expectedSecret = config.ipcSecret || "";
   const actualSecret = typeof clientSecret === "string" ? clientSecret : "";
 
+  if (!expectedSecret) {
+    return false;
+  }
+
   const expectedBuffer = Buffer.from(expectedSecret);
   const actualBuffer = Buffer.from(actualSecret);
 
-  if (
-    !expectedSecret ||
-    expectedBuffer.length !== actualBuffer.length ||
-    !crypto.timingSafeEqual(expectedBuffer, actualBuffer)
-  ) {
-    return false;
-  }
-  return true;
+  // Pad both to the same length before comparing to avoid leaking secret length
+  // via a short-circuit before timingSafeEqual. The actual length equality check
+  // happens after the constant-time comparison.
+  const maxLen = Math.max(expectedBuffer.length, actualBuffer.length);
+  const paddedExpected = Buffer.alloc(maxLen);
+  const paddedActual = Buffer.alloc(maxLen);
+  expectedBuffer.copy(paddedExpected);
+  actualBuffer.copy(paddedActual);
+
+  const timingMatch = crypto.timingSafeEqual(paddedExpected, paddedActual);
+  const lengthMatch = expectedBuffer.length === actualBuffer.length;
+
+  return timingMatch && lengthMatch;
 }
 
 function authenticateSessionToken(req: IncomingMessage): boolean {
