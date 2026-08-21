@@ -358,21 +358,12 @@ function deriveTitleFromPrompt(prompt: string): string {
  * and returns the decrypted result.
  */
 export async function sendMessageAndExecute(params: SendMessageParams): Promise<SendMessageResult> {
+  // If chatId is provided upfront, check lock immediately
   if (params.chatId && activeChatLocks.has(params.chatId)) {
     throw new Error("AI is already processing a message in this chat. Please wait.");
   }
 
-  if (params.chatId) {
-    activeChatLocks.add(params.chatId);
-  }
-
-  try {
-    return await _sendMessageAndExecuteInner(params);
-  } finally {
-    if (params.chatId) {
-      activeChatLocks.delete(params.chatId);
-    }
-  }
+  return await _sendMessageAndExecuteInner(params);
 }
 
 async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<SendMessageResult> {
@@ -438,6 +429,14 @@ async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<S
     });
     chatRecord = await getChatRecordById(chat.id);
   }
+
+  // Acquire lock on the resolved chat ID (covers both existing and auto-created chats)
+  if (activeChatLocks.has(chat.id)) {
+    throw new Error("AI is already processing a message in this chat. Please wait.");
+  }
+  activeChatLocks.add(chat.id);
+
+  try {
 
   // Retrieve prior conversation messages for context
   const existingMessages = await getChatMessages(chat.id, 100, 0, "desc");
@@ -658,6 +657,10 @@ async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<S
     userMessage: userMessageDto,
     assistantMessage: assistantMessageDto,
   };
+
+  } finally {
+    activeChatLocks.delete(chat.id);
+  }
 }
 
 /**
