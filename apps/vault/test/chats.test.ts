@@ -1,14 +1,10 @@
-import { describe, it, expect, beforeEach, afterAll, beforeAll, vi } from "vitest";
-import { createVaultHttpServer } from "../src/server.js";
-import { config } from "../src/config.js";
+import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
 import { vaultState } from "../src/vault/state.js";
 import { initVault } from "../src/vault/init.js";
 import { createChat, decryptChatTitle } from "../src/vault/chats/index.js";
 import { createInMemoryPrismaMock } from "./helpers/mockDb.js";
-import request from "supertest";
 
-describe("Chats API (Unit Tests / In-Memory Mock DB)", () => {
-  const server = createVaultHttpServer();
+describe("Chats Service (Unit Tests / In-Memory Mock DB)", () => {
   const dbMock = createInMemoryPrismaMock();
   const prisma = dbMock.mockPrisma;
 
@@ -17,10 +13,6 @@ describe("Chats API (Unit Tests / In-Memory Mock DB)", () => {
     if (!record) throw new Error("Not found");
     return decryptChatTitle(record, vaultState.getDbKey()!, false);
   }
-
-  beforeAll(() => {
-    config.ipcSecret = "test-secret";
-  });
 
   beforeEach(() => {
     vaultState.lock();
