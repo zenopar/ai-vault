@@ -133,7 +133,8 @@ async function callGemini(
 
   if (!res.ok) {
     const errorText = await res.text();
-    throw new Error(`Gemini API error (${res.status}): ${errorText}`);
+    console.error(`[Gemini] API error (${res.status}):`, errorText);
+    throw new Error(`AI request failed (${res.status}). Please try again.`);
   }
 
   const data = (await res.json()) as {
@@ -196,7 +197,8 @@ async function callAnthropic(
 
   if (!res.ok) {
     const errorText = await res.text();
-    throw new Error(`Anthropic API error (${res.status}): ${errorText}`);
+    console.error(`[Anthropic] API error (${res.status}):`, errorText);
+    throw new Error(`AI request failed (${res.status}). Please try again.`);
   }
 
   const data = (await res.json()) as {
@@ -241,7 +243,8 @@ async function callOpenAiCompatible(
 
   if (!res.ok) {
     const errorText = await res.text();
-    throw new Error(`AI API error (${res.status}): ${errorText}`);
+    console.error(`[AI provider] API error (${res.status}):`, errorText);
+    throw new Error(`AI request failed (${res.status}). Please try again.`);
   }
 
   const data = (await res.json()) as {
