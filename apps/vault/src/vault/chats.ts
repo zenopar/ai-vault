@@ -74,7 +74,8 @@ function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedChatFiel
     try {
       const inAad = buildFieldAad("chat", record.id, "input_tokens", record.encryption_version);
       const decIn = decryptBuffer({ ciphertext: record.encrypted_input_tokens, iv: record.input_tokens_iv, tag: record.input_tokens_tag }, dbKey, inAad);
-      inputTokens = parseInt(decIn.toString("utf-8"), 10) || undefined;
+      const parsedIn = parseInt(decIn.toString("utf-8"), 10);
+      inputTokens = Number.isNaN(parsedIn) ? undefined : parsedIn;
     } catch (e) { console.warn(`Failed to decrypt input_tokens for chat ${record.id}:`, e); }
   }
 
@@ -82,7 +83,8 @@ function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedChatFiel
     try {
       const outAad = buildFieldAad("chat", record.id, "output_tokens", record.encryption_version);
       const decOut = decryptBuffer({ ciphertext: record.encrypted_output_tokens, iv: record.output_tokens_iv, tag: record.output_tokens_tag }, dbKey, outAad);
-      outputTokens = parseInt(decOut.toString("utf-8"), 10) || undefined;
+      const parsedOut = parseInt(decOut.toString("utf-8"), 10);
+      outputTokens = Number.isNaN(parsedOut) ? undefined : parsedOut;
     } catch (e) { console.warn(`Failed to decrypt output_tokens for chat ${record.id}:`, e); }
   }
 
