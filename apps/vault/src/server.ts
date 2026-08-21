@@ -65,14 +65,26 @@ function readJsonBody<T = any>(req: IncomingMessage): Promise<T> {
   });
 }
 
+const ALLOWED_ORIGIN_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
+function resolveAllowedOrigin(req: IncomingMessage): string {
+  const origin = req.headers["origin"];
+  if (origin && ALLOWED_ORIGIN_PATTERN.test(origin)) {
+    return origin;
+  }
+  return "http://localhost:3000";
+}
+
+function setCorsHeaders(res: ServerResponse, origin: string): void {
+  res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-vault-secret, x-session-token");
+}
+
 function sendJson<T = unknown>(res: ServerResponse, statusCode: number, data: T) {
   const json = JSON.stringify(data);
-  res.writeHead(statusCode, {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-vault-secret, x-session-token",
-  });
+  res.writeHead(statusCode, { "Content-Type": "application/json" });
   res.end(json);
 }
 
@@ -120,13 +132,13 @@ export function createVaultHttpServer() {
     const pathname = url.pathname;
     const method = req.method?.toUpperCase();
 
+    // Set CORS headers for every request based on Origin
+    const corsOrigin = resolveAllowedOrigin(req);
+    setCorsHeaders(res, corsOrigin);
+
     // 1. Preflight OPTIONS
     if (method === "OPTIONS") {
-      res.writeHead(204, {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, x-vault-secret, x-session-token",
-      });
+      res.writeHead(204);
       res.end();
       return;
     }
