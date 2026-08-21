@@ -105,10 +105,7 @@ function authenticateIpcRequest(req: IncomingMessage): boolean {
 
 function authenticateSessionToken(req: IncomingMessage): boolean {
   const token =
-    (typeof req.headers["x-session-token"] === "string" ? req.headers["x-session-token"] : null) ||
-    (typeof req.headers["authorization"] === "string" && req.headers["x-vault-secret"]
-      ? req.headers["authorization"].replace("Bearer ", "")
-      : null);
+    typeof req.headers["x-session-token"] === "string" ? req.headers["x-session-token"] : null;
 
   if (!token) {
     return false;
