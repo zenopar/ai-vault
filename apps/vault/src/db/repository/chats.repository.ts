@@ -143,7 +143,17 @@ export async function updateChatRecord(
 
 export async function deleteChatRecord(id: string): Promise<ChatRecord> {
   const prisma = getPrismaClient();
-  return prisma.chats.delete({
-    where: { id },
+  return prisma.$transaction(async (tx) => {
+    // Soft delete all messages associated with the chat
+    await tx.messages.updateMany({
+      where: { chat_id: id },
+      data: { status: "DELETED", updated_at: new Date() },
+    });
+
+    // Soft delete the chat itself
+    return tx.chats.update({
+      where: { id },
+      data: { status: "DELETED", updated_at: new Date() },
+    });
   });
 }
