@@ -329,6 +329,10 @@ export async function getChatMessages(
  * Deletes a chat record and its associated messages.
  */
 export async function removeChat(id: string): Promise<boolean> {
+  if (!vaultState.isUnlocked()) {
+    throw new VaultLockedError();
+  }
+
   const existing = await getChatRecordById(id);
   if (!existing) {
     throw new ChatNotFoundError();
