@@ -88,6 +88,9 @@ describe("End-to-End Chat & Messaging API (Unit Tests / Mock AI)", () => {
         model: "gpt-5.6-sol",
       });
 
+    if (res.status !== 200) {
+      console.error("Test failed with status:", res.status, res.body);
+    }
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.chat).toBeDefined();

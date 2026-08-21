@@ -110,6 +110,12 @@ CREATE TABLE IF NOT EXISTS "vault"."chats" (
     "thought_tokens_iv" VARCHAR(32),
     "thought_tokens_tag" VARCHAR(32),
 
+    -- Encrypted Aggregate Thought Cost (AES-256-GCM via DB Key)
+    -- AAD format: type:chat|id:<chat_id>|field:thought_cost|v:<encryption_version>
+    "encrypted_thought_cost" TEXT,
+    "thought_cost_iv" VARCHAR(32),
+    "thought_cost_tag" VARCHAR(32),
+
     -- Encrypted Aggregate Input Cost (AES-256-GCM via DB Key)
     -- AAD format: type:chat|id:<chat_id>|field:input_cost|v:<encryption_version>
     "encrypted_input_cost" TEXT,
@@ -155,11 +161,17 @@ CREATE TABLE IF NOT EXISTS "vault"."messages" (
     "content_iv" VARCHAR(32) NOT NULL,              -- 12-byte IV / Nonce (Hex)
     "content_tag" VARCHAR(32) NOT NULL,             -- 16-byte Auth Tag (Hex)
 
-    -- Encrypted Token Usage (AES-256-GCM via DB Key - prompt/completion/total tokens)
-    -- AAD format: type:chat_message|id:<message_id>|field:tokens|v:<encryption_version>
-    "encrypted_tokens" TEXT,
-    "tokens_iv" VARCHAR(32),
-    "tokens_tag" VARCHAR(32),
+    -- Encrypted Input Tokens (AES-256-GCM via DB Key)
+    -- AAD format: type:chat_message|id:<message_id>|field:input_tokens|v:<encryption_version>
+    "encrypted_input_tokens" TEXT,
+    "input_tokens_iv" VARCHAR(32),
+    "input_tokens_tag" VARCHAR(32),
+
+    -- Encrypted Output Tokens (AES-256-GCM via DB Key)
+    -- AAD format: type:chat_message|id:<message_id>|field:output_tokens|v:<encryption_version>
+    "encrypted_output_tokens" TEXT,
+    "output_tokens_iv" VARCHAR(32),
+    "output_tokens_tag" VARCHAR(32),
 
     -- Encrypted Thought Tokens (AES-256-GCM via DB Key)
     -- AAD format: type:chat_message|id:<message_id>|field:thought_tokens|v:<encryption_version>
@@ -167,11 +179,23 @@ CREATE TABLE IF NOT EXISTS "vault"."messages" (
     "thought_tokens_iv" VARCHAR(32),
     "thought_tokens_tag" VARCHAR(32),
 
-    -- Encrypted Message Cost (AES-256-GCM via DB Key)
-    -- AAD format: type:chat_message|id:<message_id>|field:cost|v:<encryption_version>
-    "encrypted_cost" TEXT,
-    "cost_iv" VARCHAR(32),
-    "cost_tag" VARCHAR(32),
+    -- Encrypted Input Cost (AES-256-GCM via DB Key)
+    -- AAD format: type:chat_message|id:<message_id>|field:input_cost|v:<encryption_version>
+    "encrypted_input_cost" TEXT,
+    "input_cost_iv" VARCHAR(32),
+    "input_cost_tag" VARCHAR(32),
+
+    -- Encrypted Output Cost (AES-256-GCM via DB Key)
+    -- AAD format: type:chat_message|id:<message_id>|field:output_cost|v:<encryption_version>
+    "encrypted_output_cost" TEXT,
+    "output_cost_iv" VARCHAR(32),
+    "output_cost_tag" VARCHAR(32),
+
+    -- Encrypted Thought Cost (AES-256-GCM via DB Key)
+    -- AAD format: type:chat_message|id:<message_id>|field:thought_cost|v:<encryption_version>
+    "encrypted_thought_cost" TEXT,
+    "thought_cost_iv" VARCHAR(32),
+    "thought_cost_tag" VARCHAR(32),
 
     -- Encrypted Sensitive Metadata (model name, reasoning trace, tool calls, encrypted timestamps)
     -- AAD format: type:chat_message|id:<message_id>|field:metadata|v:<encryption_version>

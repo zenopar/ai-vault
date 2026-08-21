@@ -80,6 +80,9 @@ model chats {
   encrypted_thought_tokens String?
   thought_tokens_iv        String?    @db.VarChar(32)
   thought_tokens_tag       String?    @db.VarChar(32)
+  encrypted_thought_cost   String?
+  thought_cost_iv          String?    @db.VarChar(32)
+  thought_cost_tag         String?    @db.VarChar(32)
   encrypted_input_cost     String?
   input_cost_iv            String?    @db.VarChar(32)
   input_cost_tag           String?    @db.VarChar(32)
@@ -109,15 +112,24 @@ model messages {
   encrypted_content        String
   content_iv               String     @db.VarChar(32)
   content_tag              String     @db.VarChar(32)
-  encrypted_tokens         String?
-  tokens_iv                String?    @db.VarChar(32)
-  tokens_tag               String?    @db.VarChar(32)
+  encrypted_input_tokens   String?
+  input_tokens_iv          String?    @db.VarChar(32)
+  input_tokens_tag         String?    @db.VarChar(32)
+  encrypted_output_tokens  String?
+  output_tokens_iv         String?    @db.VarChar(32)
+  output_tokens_tag        String?    @db.VarChar(32)
   encrypted_thought_tokens String?
   thought_tokens_iv        String?    @db.VarChar(32)
   thought_tokens_tag       String?    @db.VarChar(32)
-  encrypted_cost           String?
-  cost_iv                  String?    @db.VarChar(32)
-  cost_tag                 String?    @db.VarChar(32)
+  encrypted_input_cost     String?
+  input_cost_iv            String?    @db.VarChar(32)
+  input_cost_tag           String?    @db.VarChar(32)
+  encrypted_output_cost    String?
+  output_cost_iv           String?    @db.VarChar(32)
+  output_cost_tag          String?    @db.VarChar(32)
+  encrypted_thought_cost   String?
+  thought_cost_iv          String?    @db.VarChar(32)
+  thought_cost_tag         String?    @db.VarChar(32)
   encrypted_metadata       String?
   metadata_iv              String?    @db.VarChar(32)
   metadata_tag             String?    @db.VarChar(32)

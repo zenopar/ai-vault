@@ -17,6 +17,9 @@ export interface CreateChatData {
   encrypted_output_tokens?: string | null;
   output_tokens_iv?: string | null;
   output_tokens_tag?: string | null;
+  encrypted_thought_tokens?: string | null;
+  thought_tokens_iv?: string | null;
+  thought_tokens_tag?: string | null;
   encrypted_input_cost?: string | null;
   input_cost_iv?: string | null;
   input_cost_tag?: string | null;
@@ -44,6 +47,9 @@ export interface ChatRecord {
   encrypted_output_tokens: string | null;
   output_tokens_iv: string | null;
   output_tokens_tag: string | null;
+  encrypted_thought_tokens: string | null;
+  thought_tokens_iv: string | null;
+  thought_tokens_tag: string | null;
   encrypted_input_cost: string | null;
   input_cost_iv: string | null;
   input_cost_tag: string | null;
@@ -76,6 +82,9 @@ export async function createChatRecord(data: CreateChatData): Promise<ChatRecord
       encrypted_output_tokens: data.encrypted_output_tokens ?? null,
       output_tokens_iv: data.output_tokens_iv ?? null,
       output_tokens_tag: data.output_tokens_tag ?? null,
+      encrypted_thought_tokens: data.encrypted_thought_tokens ?? null,
+      thought_tokens_iv: data.thought_tokens_iv ?? null,
+      thought_tokens_tag: data.thought_tokens_tag ?? null,
       encrypted_input_cost: data.encrypted_input_cost ?? null,
       input_cost_iv: data.input_cost_iv ?? null,
       input_cost_tag: data.input_cost_tag ?? null,
@@ -127,6 +136,9 @@ export async function updateChatRecord(
       ...(data.encrypted_output_tokens !== undefined && { encrypted_output_tokens: data.encrypted_output_tokens }),
       ...(data.output_tokens_iv !== undefined && { output_tokens_iv: data.output_tokens_iv }),
       ...(data.output_tokens_tag !== undefined && { output_tokens_tag: data.output_tokens_tag }),
+      ...(data.encrypted_thought_tokens !== undefined && { encrypted_thought_tokens: data.encrypted_thought_tokens }),
+      ...(data.thought_tokens_iv !== undefined && { thought_tokens_iv: data.thought_tokens_iv }),
+      ...(data.thought_tokens_tag !== undefined && { thought_tokens_tag: data.thought_tokens_tag }),
       ...(data.encrypted_input_cost !== undefined && { encrypted_input_cost: data.encrypted_input_cost }),
       ...(data.input_cost_iv !== undefined && { input_cost_iv: data.input_cost_iv }),
       ...(data.input_cost_tag !== undefined && { input_cost_tag: data.input_cost_tag }),

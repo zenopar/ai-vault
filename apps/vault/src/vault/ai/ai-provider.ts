@@ -19,6 +19,7 @@ export interface AiExecutionResult {
   model: string;
   inputTokens?: number;
   outputTokens?: number;
+  thoughtTokens?: number;
 }
 
 export class NoActiveApiKeyError extends Error {
@@ -72,7 +73,7 @@ export async function executeAiCompletion(params: AiExecutionParams): Promise<Ai
   const apiKey = await getDecryptedApiKey(selectedKeyRecord.id);
 
   let model = params.model;
-  let result: { text: string; inputTokens?: number; outputTokens?: number };
+  let result: { text: string; inputTokens?: number; outputTokens?: number; thoughtTokens?: number };
 
   const mergedMessages = mergeSystemPrompt(params.messages);
 
@@ -101,6 +102,7 @@ export async function executeAiCompletion(params: AiExecutionParams): Promise<Ai
     model,
     inputTokens: result.inputTokens,
     outputTokens: result.outputTokens,
+    thoughtTokens: result.thoughtTokens,
   };
 }
 
@@ -109,7 +111,7 @@ async function callGemini(
   model: string,
   messages: ChatMessagePrompt[],
   maxOutputTokens: number = 2000
-): Promise<{ text: string; inputTokens?: number; outputTokens?: number }> {
+): Promise<{ text: string; inputTokens?: number; outputTokens?: number; thoughtTokens?: number }> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
   const finalSystemInstructionText = messages.find((m) => m.role === "system")?.content || "";
@@ -167,6 +169,8 @@ async function callGemini(
     text: partText,
     inputTokens: data.usageMetadata?.promptTokenCount,
     outputTokens: data.usageMetadata?.candidatesTokenCount,
+    // Google Gemini currently lumps them in candidatesTokenCount, but we can look for future fields
+    thoughtTokens: (data.usageMetadata as any)?.thoughtsTokenCount ?? (data.usageMetadata as any)?.thinkingTokenCount ?? (data.usageMetadata as any)?.reasoningTokenCount,
   };
 }
 
@@ -175,7 +179,7 @@ async function callAnthropic(
   model: string,
   messages: ChatMessagePrompt[],
   maxTokens: number = 2000
-): Promise<{ text: string; inputTokens?: number; outputTokens?: number }> {
+): Promise<{ text: string; inputTokens?: number; outputTokens?: number; thoughtTokens?: number }> {
   const url = "https://api.anthropic.com/v1/messages";
 
   const systemMsg = messages.find((m) => m.role === "system");
@@ -229,6 +233,7 @@ async function callAnthropic(
     text,
     inputTokens: data.usage?.input_tokens,
     outputTokens: data.usage?.output_tokens,
+    thoughtTokens: (data.usage as any)?.completion_tokens_details?.thinking_tokens,
   };
 }
 
@@ -238,7 +243,7 @@ async function callOpenAiCompatible(
   model: string,
   messages: ChatMessagePrompt[],
   maxTokens: number = 2000
-): Promise<{ text: string; inputTokens?: number; outputTokens?: number }> {
+): Promise<{ text: string; inputTokens?: number; outputTokens?: number; thoughtTokens?: number }> {
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -276,5 +281,6 @@ async function callOpenAiCompatible(
     text: content,
     inputTokens: data.usage?.prompt_tokens,
     outputTokens: data.usage?.completion_tokens,
+    thoughtTokens: (data.usage as any)?.completion_tokens_details?.reasoning_tokens ?? (data.usage as any)?.completion_tokens_details?.thinking_tokens,
   };
 }

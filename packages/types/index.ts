@@ -73,6 +73,7 @@ export interface ChatMetadata {
   metadata?: Record<string, any> | null;
   inputTokens?: number;
   outputTokens?: number;
+  thoughtTokens?: number;
   inputCost?: number;
   outputCost?: number;
   totalCost?: number;
@@ -106,7 +107,11 @@ export interface ChatMessageDto {
   sequenceNumber: number;
   inputTokens?: number;
   outputTokens?: number;
-  cost?: number;
+  thoughtTokens?: number;
+  inputCost?: number;
+  outputCost?: number;
+  thoughtCost?: number;
+  totalCost?: number;
   createdAt: string;
   updatedAt: string;
 }

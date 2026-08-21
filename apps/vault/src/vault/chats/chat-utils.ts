@@ -33,6 +33,7 @@ export interface DecryptedChatFields {
   metadata: Record<string, any> | null;
   inputTokens?: number;
   outputTokens?: number;
+  thoughtTokens?: number;
   inputCost?: number;
   outputCost?: number;
   totalCost?: number;
@@ -76,6 +77,16 @@ export function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedC
     } catch (e) { console.warn(`Failed to decrypt output_tokens for chat ${record.id}:`, e); }
   }
 
+  let thoughtTokens: number | undefined;
+  if ((record as any).encrypted_thought_tokens && (record as any).thought_tokens_iv && (record as any).thought_tokens_tag) {
+    try {
+      const thoughtAad = buildFieldAad("chat", record.id, "thought_tokens", record.encryption_version);
+      const decThought = decryptBuffer({ ciphertext: (record as any).encrypted_thought_tokens, iv: (record as any).thought_tokens_iv, tag: (record as any).thought_tokens_tag }, dbKey, thoughtAad);
+      const parsedThought = parseInt(decThought.toString("utf-8"), 10);
+      thoughtTokens = Number.isNaN(parsedThought) ? undefined : parsedThought;
+    } catch (e) { console.warn(`Failed to decrypt thought_tokens for chat ${record.id}:`, e); }
+  }
+
   let inputCost: number | undefined;
   let outputCost: number | undefined;
   let totalCost: number | undefined;
@@ -107,7 +118,7 @@ export function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedC
     } catch (e) { console.warn(`Failed to decrypt total_cost for chat ${record.id}:`, e); }
   }
 
-  return { metadata, inputTokens, outputTokens, inputCost, outputCost, totalCost };
+  return { metadata, inputTokens, outputTokens, thoughtTokens, inputCost, outputCost, totalCost };
 }
 
 /**
