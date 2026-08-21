@@ -429,6 +429,9 @@ async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<S
       },
     });
     chatRecord = await getChatRecordById(chat.id);
+    if (!chatRecord) {
+      throw new Error("Failed to retrieve chat record immediately after creation.");
+    }
   }
 
   // Acquire lock on the resolved chat ID (covers both existing and auto-created chats)
