@@ -12,6 +12,7 @@ import {
 } from "../db/repository/chats.repository.js";
 import {
   createMessageRecord,
+  createMessageWithSequence,
   getMessagesByChatId,
   getLatestSequenceNumber,
 } from "../db/repository/messages.repository.js";
@@ -518,8 +519,6 @@ async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<S
 
   includedMessages.reverse(); // Put them in chronological order
 
-  const latestSeq = await getLatestSequenceNumber(chat.id);
-
   // 1. Prepare prompt context for AI completion
   const promptContext: ChatMessagePrompt[] = [
     ...includedMessages.map((m) => ({ role: m.role, content: m.content })),
@@ -527,20 +526,20 @@ async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<S
   ];
 
   // 2. Encrypt and store user message BEFORE AI generation to prevent data loss
+  //    Uses a transaction to atomically read the latest sequence number and insert.
   const userMsgId = randomUUID();
   const userAad = buildFieldAad("message", userMsgId, "content", 1);
   const encUserContent = encryptBuffer(Buffer.from(trimmedMessage, "utf-8"), dbKey, userAad);
 
-  const userRecord = await createMessageRecord({
+  const { record: userRecord, latestSeq } = await createMessageWithSequence({
     id: userMsgId,
     chat_id: chat.id,
-    sequence_number: latestSeq + 1,
     role: "user",
     encryption_version: 1,
     encrypted_content: encUserContent.ciphertext,
     content_iv: encUserContent.iv,
     content_tag: encUserContent.tag,
-  });
+  }, chat.id);
 
   const userMessageDto: ChatMessageDto = {
     id: userRecord.id,

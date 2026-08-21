@@ -108,3 +108,49 @@ export async function getLatestSequenceNumber(chatId: string): Promise<number> {
   });
   return latest?.sequence_number ?? 0;
 }
+
+/**
+ * Atomically reads the latest sequence number and creates a message in a single transaction.
+ * Returns the created record and the sequence number base used (for inserting follow-up messages).
+ */
+export async function createMessageWithSequence(
+  data: Omit<CreateMessageData, "sequence_number">,
+  chatId: string,
+  sequenceOffset: number = 1,
+): Promise<{ record: MessageRecord; latestSeq: number }> {
+  const prisma = getPrismaClient();
+  return prisma.$transaction(async (tx) => {
+    const latest = await tx.messages.findFirst({
+      where: { chat_id: chatId, status: "ACTIVE" },
+      orderBy: { sequence_number: "desc" },
+      select: { sequence_number: true },
+    });
+    const latestSeq = latest?.sequence_number ?? 0;
+
+    const record = await tx.messages.create({
+      data: {
+        id: data.id || randomUUID(),
+        chat_id: data.chat_id,
+        parent_message_id: data.parent_message_id ?? null,
+        sequence_number: latestSeq + sequenceOffset,
+        role: data.role,
+        encryption_version: data.encryption_version ?? 1,
+        status: data.status ?? "ACTIVE",
+        encrypted_content: data.encrypted_content,
+        content_iv: data.content_iv,
+        content_tag: data.content_tag,
+        encrypted_tokens: data.encrypted_tokens ?? null,
+        tokens_iv: data.tokens_iv ?? null,
+        tokens_tag: data.tokens_tag ?? null,
+        encrypted_cost: data.encrypted_cost ?? null,
+        cost_iv: data.cost_iv ?? null,
+        cost_tag: data.cost_tag ?? null,
+        encrypted_metadata: data.encrypted_metadata ?? null,
+        metadata_iv: data.metadata_iv ?? null,
+        metadata_tag: data.metadata_tag ?? null,
+      },
+    });
+
+    return { record, latestSeq };
+  });
+}
