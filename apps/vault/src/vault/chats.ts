@@ -662,11 +662,17 @@ export async function getDecryptedChatTitle(chatId: string): Promise<string> {
     throw new ChatNotFoundError();
   }
 
-  const decryptedTitle = decryptChatTitle(record, dbKey);
+  const aad = buildFieldAad("chat", record.id, "title", record.encryption_version);
+  const decrypted = decryptBuffer(
+    {
+      ciphertext: record.encrypted_title,
+      iv: record.title_iv,
+      tag: record.title_tag,
+    },
+    dbKey,
+    aad
+  );
 
   vaultState.touch();
-  // If decryption failed, decryptChatTitle returns "Untitled Chat".
-  // Note: the original implementation here threw an error on failure by returning the decrypted buffer.
-  // We'll return the fallback title which is safer and matches the rest of the application.
-  return decryptedTitle;
+  return decrypted.toString("utf-8");
 }

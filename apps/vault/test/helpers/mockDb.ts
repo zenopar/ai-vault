@@ -109,6 +109,14 @@ export function createInMemoryPrismaMock() {
   initDefaultModels();
 
   const mockPrisma = {
+    $transaction: vi.fn(async (callback) => {
+      if (Array.isArray(callback)) {
+        // Handle array of Prisma promises if they use that overload
+        return Promise.all(callback);
+      }
+      // Handle interactive transaction callback
+      return callback(mockPrisma);
+    }),
     vault_config: {
       findFirst: vi.fn(async () => vaultConfigRecord),
       create: vi.fn(async ({ data }: any) => {
