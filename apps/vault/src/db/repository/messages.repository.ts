@@ -102,7 +102,7 @@ export async function getMessageRecordById(id: string): Promise<MessageRecord | 
 export async function getLatestSequenceNumber(chatId: string): Promise<number> {
   const prisma = getPrismaClient();
   const latest = await prisma.messages.findFirst({
-    where: { chat_id: chatId },
+    where: { chat_id: chatId, status: "ACTIVE" },
     orderBy: { sequence_number: "desc" },
     select: { sequence_number: true },
   });
