@@ -114,6 +114,7 @@ export interface SendChatMessageRequest {
   message: string;
   provider?: string;
   model?: string;
+  thinkingLevel?: "low" | "medium" | "high" | "none" | string;
   sessionToken?: string;
 }
 

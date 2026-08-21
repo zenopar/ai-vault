@@ -346,6 +346,7 @@ export function createVaultHttpServer() {
           message?: string;
           provider?: string;
           model?: string;
+          thinkingLevel?: "low" | "medium" | "high" | "none";
         }>(req);
 
         if (!authenticateSessionToken(req)) {
@@ -363,6 +364,7 @@ export function createVaultHttpServer() {
           message: body.message,
           provider: body.provider,
           model: body.model,
+          thinkingLevel: body.thinkingLevel,
         });
 
         sendJson<SendChatMessageResponse>(res, 200, {

@@ -23,6 +23,7 @@ export interface SendMessageParams {
   message: string;
   provider?: string;
   model?: string;
+  thinkingLevel?: "low" | "medium" | "high" | "none";
 }
 
 export interface SendMessageResult {
@@ -189,6 +190,7 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
       messages: promptContext,
       provider: params.provider,
       model: params.model,
+      thinkingLevel: params.thinkingLevel,
       maxOutputTokens,
     });
 

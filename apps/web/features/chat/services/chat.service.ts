@@ -81,6 +81,7 @@ export async function sendMessageService(params: {
   message: string;
   provider?: string;
   model?: string;
+  thinkingLevel?: "low" | "medium" | "high" | "none" | string;
 }): Promise<SendChatMessageResponse> {
   const sessionToken = await getSessionToken();
   if (!sessionToken) {
@@ -94,6 +95,7 @@ export async function sendMessageService(params: {
       message: params.message,
       provider: params.provider,
       model: params.model,
+      thinkingLevel: params.thinkingLevel,
     },
     {
       sessionToken,

@@ -75,27 +75,26 @@ export async function executeAiCompletion(params: AiExecutionParams): Promise<Ai
   const apiKey = await getDecryptedApiKey(selectedKeyRecord.id);
 
   let model = params.model;
-  let thinkingLevel = params.thinkingLevel ?? "none";
+  let thinkingLevel: string = params.thinkingLevel !== undefined ? params.thinkingLevel : (provider === "google" ? "medium" : "none");
   let result: { text: string; inputTokens?: number; outputTokens?: number; thoughtTokens?: number; thinkingLevel?: string };
 
   const mergedMessages = mergeSystemPrompt(params.messages);
 
   if (provider === "google") {
     model = model || "gemini-3.7-flash";
-    thinkingLevel = params.thinkingLevel ?? "medium"; // Google defaults to medium for reasoning models
     result = await callGemini(apiKey, model, mergedMessages, params.maxOutputTokens, thinkingLevel);
   } else if (provider === "anthropic") {
     model = model || "claude-sonnet-5";
-    result = await callAnthropic(apiKey, model, mergedMessages, params.maxOutputTokens);
+    result = await callAnthropic(apiKey, model, mergedMessages, params.maxOutputTokens, thinkingLevel);
   } else if (provider === "deepseek") {
     model = model || "deepseek-v4-pro";
-    result = await callOpenAiCompatible("https://api.deepseek.com/chat/completions", apiKey, model, mergedMessages, params.maxOutputTokens);
+    result = await callOpenAiCompatible("https://api.deepseek.com/chat/completions", apiKey, model, mergedMessages, params.maxOutputTokens, thinkingLevel);
   } else if (provider === "groq") {
     model = model || "openai/gpt-oss-120b";
-    result = await callOpenAiCompatible("https://api.groq.com/openai/v1/chat/completions", apiKey, model, mergedMessages, params.maxOutputTokens);
+    result = await callOpenAiCompatible("https://api.groq.com/openai/v1/chat/completions", apiKey, model, mergedMessages, params.maxOutputTokens, thinkingLevel);
   } else if (provider === "openai") {
     model = model || "gpt-5.6-sol";
-    result = await callOpenAiCompatible("https://api.openai.com/v1/chat/completions", apiKey, model, mergedMessages, params.maxOutputTokens);
+    result = await callOpenAiCompatible("https://api.openai.com/v1/chat/completions", apiKey, model, mergedMessages, params.maxOutputTokens, thinkingLevel);
   } else {
     throw new UnsupportedProviderError(provider);
   }
@@ -129,6 +128,8 @@ async function callGemini(
       parts: [{ text: m.content }],
     }));
 
+  const isGeminiThinkingModel = model.includes("2.5") || model.includes("3.7") || model.includes("thinking");
+
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -143,11 +144,19 @@ async function callGemini(
       generationConfig: {
         maxOutputTokens,
         temperature: 0.4,
-        ...(thinkingLevel !== "none" ? {
-          thinkingConfig: {
-            thinkingLevel: thinkingLevel
-          }
-        } : {})
+        ...(thinkingLevel !== "none"
+          ? {
+              thinkingConfig: {
+                thinkingLevel: thinkingLevel,
+              },
+            }
+          : isGeminiThinkingModel
+          ? {
+              thinkingConfig: {
+                thinkingBudget: 0,
+              },
+            }
+          : {}),
       },
     }),
   });
@@ -177,7 +186,6 @@ async function callGemini(
     text: partText,
     inputTokens: data.usageMetadata?.promptTokenCount,
     outputTokens: data.usageMetadata?.candidatesTokenCount,
-    // Google Gemini currently lumps them in candidatesTokenCount, but we can look for future fields
     thoughtTokens: (data.usageMetadata as any)?.thoughtsTokenCount ?? (data.usageMetadata as any)?.thinkingTokenCount ?? (data.usageMetadata as any)?.reasoningTokenCount,
     thinkingLevel,
   };
@@ -187,8 +195,9 @@ async function callAnthropic(
   apiKey: string,
   model: string,
   messages: ChatMessagePrompt[],
-  maxTokens: number = 2000
-): Promise<{ text: string; inputTokens?: number; outputTokens?: number; thoughtTokens?: number }> {
+  maxTokens: number = 2000,
+  thinkingLevel: string = "none"
+): Promise<{ text: string; inputTokens?: number; outputTokens?: number; thoughtTokens?: number; thinkingLevel?: string }> {
   const url = "https://api.anthropic.com/v1/messages";
 
   const systemMsg = messages.find((m) => m.role === "system");
@@ -207,6 +216,20 @@ async function callAnthropic(
 
   if (systemMsg) {
     payload.system = systemMsg.content;
+  }
+
+  if (thinkingLevel && thinkingLevel !== "none") {
+    const budgetMap: Record<string, number> = {
+      low: 1024,
+      medium: 4096,
+      high: 8192,
+    };
+    const budgetTokens = budgetMap[thinkingLevel] || 2048;
+    payload.thinking = {
+      type: "enabled",
+      budget_tokens: budgetTokens,
+    };
+    payload.max_tokens = Math.max(maxTokens, budgetTokens + 1024);
   }
 
   const res = await fetch(url, {
@@ -243,6 +266,7 @@ async function callAnthropic(
     inputTokens: data.usage?.input_tokens,
     outputTokens: data.usage?.output_tokens,
     thoughtTokens: (data.usage as any)?.completion_tokens_details?.thinking_tokens,
+    thinkingLevel,
   };
 }
 
@@ -251,19 +275,26 @@ async function callOpenAiCompatible(
   apiKey: string,
   model: string,
   messages: ChatMessagePrompt[],
-  maxTokens: number = 2000
-): Promise<{ text: string; inputTokens?: number; outputTokens?: number; thoughtTokens?: number }> {
+  maxTokens: number = 2000,
+  thinkingLevel: string = "none"
+): Promise<{ text: string; inputTokens?: number; outputTokens?: number; thoughtTokens?: number; thinkingLevel?: string }> {
+  const payload: Record<string, any> = {
+    model,
+    max_tokens: maxTokens,
+    messages: messages.map((m) => ({ role: m.role, content: m.content })),
+  };
+
+  if (thinkingLevel && thinkingLevel !== "none") {
+    payload.reasoning_effort = thinkingLevel;
+  }
+
   const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
-    }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
@@ -291,5 +322,6 @@ async function callOpenAiCompatible(
     inputTokens: data.usage?.prompt_tokens,
     outputTokens: data.usage?.completion_tokens,
     thoughtTokens: (data.usage as any)?.completion_tokens_details?.reasoning_tokens ?? (data.usage as any)?.completion_tokens_details?.thinking_tokens,
+    thinkingLevel,
   };
 }

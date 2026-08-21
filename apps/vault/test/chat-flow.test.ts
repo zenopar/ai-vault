@@ -177,4 +177,76 @@ describe("End-to-End Chat & Messaging API (Unit Tests / Mock AI)", () => {
 
     expect(updatedHistory.body.messages).toHaveLength(4);
   });
+
+  it("should accept thinkingLevel parameter and propagate it properly", async () => {
+    const initResult = await initVault("SecureMasterPassword123!");
+    const sessionToken = initResult.sessionToken!;
+
+    await addApiKey({
+      provider: "google",
+      name: "Google Key",
+      apiKey: "AIzaSyTestKey123",
+    });
+
+    let capturedRequestBody: any = null;
+    global.fetch = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.includes("generativelanguage.googleapis.com")) {
+        capturedRequestBody = JSON.parse(init?.body as string);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            candidates: [
+              {
+                content: {
+                  parts: [{ text: "Here is a thought-out answer with high reasoning." }],
+                },
+              },
+            ],
+            usageMetadata: {
+              promptTokenCount: 15,
+              candidatesTokenCount: 30,
+              thinkingTokenCount: 20,
+            },
+          }),
+        };
+      }
+      return { ok: false, status: 404, text: async () => "Not Found" };
+    });
+
+    const res = await request(server)
+      .post("/chats/messages")
+      .set("x-vault-secret", "test-secret")
+      .set("x-session-token", sessionToken)
+      .send({
+        message: "Explain quantum computing with high thinking",
+        provider: "google",
+        model: "gemini-3.7-flash",
+        thinkingLevel: "high",
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.assistantMessage.thinkingLevel).toBe("high");
+    expect(res.body.assistantMessage.thoughtTokens).toBe(20);
+    expect(capturedRequestBody).toBeDefined();
+    expect(capturedRequestBody.generationConfig.thinkingConfig.thinkingLevel).toBe("high");
+
+    // Also test with thinkingLevel: "none"
+    const resNone = await request(server)
+      .post("/chats/messages")
+      .set("x-vault-secret", "test-secret")
+      .set("x-session-token", sessionToken)
+      .send({
+        chatId: res.body.chat.id,
+        message: "Quick question without thinking",
+        provider: "google",
+        model: "gemini-3.7-flash",
+        thinkingLevel: "none",
+      });
+
+    expect(resNone.status).toBe(200);
+    expect(resNone.body.assistantMessage.thinkingLevel).toBe("none");
+    expect(capturedRequestBody.generationConfig.thinkingConfig.thinkingBudget).toBe(0);
+  });
 });

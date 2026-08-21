@@ -48,6 +48,7 @@ export async function sendMessageAction(formData: FormData): Promise<ActionResul
   const message = (formData.get("message") as string) || "";
   const provider = (formData.get("provider") as string) || undefined;
   const model = (formData.get("model") as string) || undefined;
+  const thinkingLevel = (formData.get("thinkingLevel") as "low" | "medium" | "high" | "none") || undefined;
 
   try {
     const result = await sendMessageService({
@@ -55,6 +56,7 @@ export async function sendMessageAction(formData: FormData): Promise<ActionResul
       message,
       provider,
       model,
+      thinkingLevel,
     });
     return { success: true, data: result };
   } catch (error) {

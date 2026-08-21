@@ -43,6 +43,8 @@ export function ChatInterface({ initialChats, initialKeys }: ChatInterfaceProps)
     return "";
   });
 
+  const [thinkingLevel, setThinkingLevel] = useState<"none" | "low" | "medium" | "high">("medium");
+
   const handleKeyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const keyId = e.target.value;
     setSelectedKeyId(keyId);
@@ -134,6 +136,7 @@ export function ChatInterface({ initialChats, initialKeys }: ChatInterfaceProps)
       formData.append("message", text);
       if (selectedKey?.provider) formData.append("provider", selectedKey.provider);
       if (selectedModelName) formData.append("model", selectedModelName);
+      if (thinkingLevel) formData.append("thinkingLevel", thinkingLevel);
 
       const res = await sendMessageAction(formData);
 
@@ -190,7 +193,7 @@ export function ChatInterface({ initialChats, initialKeys }: ChatInterfaceProps)
           </div>
         </div>
 
-        {/* Key and Model Selector */}
+        {/* Key, Model and Thinking Selector */}
         {initialKeys.length > 0 ? (
           <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap items-center gap-4 text-xs">
             <div className="flex items-center gap-2">
@@ -224,6 +227,22 @@ export function ChatInterface({ initialChats, initialKeys }: ChatInterfaceProps)
                 </select>
               </div>
             )}
+
+            <div className="flex items-center gap-2">
+              <label className="font-medium text-gray-700 flex items-center gap-1">
+                <span>🧠 Thinking:</span>
+              </label>
+              <select
+                value={thinkingLevel}
+                onChange={(e) => setThinkingLevel(e.target.value as "none" | "low" | "medium" | "high")}
+                className="px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-black bg-white text-gray-800 font-medium"
+              >
+                <option value="none">Off (Nic)</option>
+                <option value="low">Low (Nízký)</option>
+                <option value="medium">Medium (Střední)</option>
+                <option value="high">High (Vysoký)</option>
+              </select>
+            </div>
           </div>
         ) : (
           <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between text-xs text-amber-700 bg-amber-50 p-2.5 rounded-md">
