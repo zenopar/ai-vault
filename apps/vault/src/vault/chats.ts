@@ -509,7 +509,11 @@ async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<S
   const includedMessages: typeof existingMessages = [];
 
   for (const m of existingMessages) {
-    const mTokens = m.inputTokens ? m.inputTokens : Math.ceil(m.content.length / 4);
+    // For assistant messages, use outputTokens (actual response size).
+    // For user messages, use the length/4 heuristic (they don't have token counts).
+    const mTokens = (m.role === "assistant" && m.outputTokens)
+      ? m.outputTokens
+      : Math.ceil(m.content.length / 4);
     if (currentTokens + mTokens > maxTokens) {
       break;
     }
