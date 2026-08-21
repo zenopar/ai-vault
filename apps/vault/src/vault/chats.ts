@@ -74,7 +74,7 @@ function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedChatFiel
       const inAad = buildFieldAad("chat", record.id, "input_tokens", record.encryption_version);
       const decIn = decryptBuffer({ ciphertext: record.encrypted_input_tokens, iv: record.input_tokens_iv, tag: record.input_tokens_tag }, dbKey, inAad);
       inputTokens = parseInt(decIn.toString("utf-8"), 10) || undefined;
-    } catch (e) { }
+    } catch (e) { console.warn(`Failed to decrypt input_tokens for chat ${record.id}:`, e); }
   }
 
   if (record.encrypted_output_tokens && record.output_tokens_iv && record.output_tokens_tag) {
@@ -82,7 +82,7 @@ function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedChatFiel
       const outAad = buildFieldAad("chat", record.id, "output_tokens", record.encryption_version);
       const decOut = decryptBuffer({ ciphertext: record.encrypted_output_tokens, iv: record.output_tokens_iv, tag: record.output_tokens_tag }, dbKey, outAad);
       outputTokens = parseInt(decOut.toString("utf-8"), 10) || undefined;
-    } catch (e) { }
+    } catch (e) { console.warn(`Failed to decrypt output_tokens for chat ${record.id}:`, e); }
   }
 
   return { metadata, inputTokens, outputTokens };
@@ -591,7 +591,7 @@ async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<S
           const inAad = buildFieldAad("chat", chat.id, "input_tokens", chatRecord.encryption_version);
           const decIn = decryptBuffer({ ciphertext: chatRecord.encrypted_input_tokens, iv: chatRecord.input_tokens_iv, tag: chatRecord.input_tokens_tag }, dbKey, inAad);
           chatInputTokens = parseInt(decIn.toString("utf-8"), 10) || 0;
-        } catch (e) { }
+        } catch (e) { console.warn(`[sendMessage] Failed to decrypt chat input_tokens (${chat.id}):`, e); }
       }
 
       if (chatRecord.encrypted_output_tokens && chatRecord.output_tokens_iv && chatRecord.output_tokens_tag) {
@@ -599,7 +599,7 @@ async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<S
           const outAad = buildFieldAad("chat", chat.id, "output_tokens", chatRecord.encryption_version);
           const decOut = decryptBuffer({ ciphertext: chatRecord.encrypted_output_tokens, iv: chatRecord.output_tokens_iv, tag: chatRecord.output_tokens_tag }, dbKey, outAad);
           chatOutputTokens = parseInt(decOut.toString("utf-8"), 10) || 0;
-        } catch (e) { }
+        } catch (e) { console.warn(`[sendMessage] Failed to decrypt chat output_tokens (${chat.id}):`, e); }
       }
 
       chatInputTokens += (aiResult.inputTokens || 0);
