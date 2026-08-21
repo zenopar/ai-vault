@@ -21,7 +21,7 @@ import {
   removeChat,
   ChatNotFoundError
 } from "./vault/chats.js";
-import { NoActiveApiKeyError } from "./vault/ai/ai-provider.js";
+import { NoActiveApiKeyError, UnsupportedProviderError } from "./vault/ai/ai-provider.js";
 import { vaultState } from "./vault/state.js";
 import {
   VaultStatusResponse,
@@ -94,10 +94,9 @@ function authenticateIpcRequest(req: IncomingMessage): boolean {
   return true;
 }
 
-function authenticateSessionToken(req: IncomingMessage, body?: { sessionToken?: string }): boolean {
+function authenticateSessionToken(req: IncomingMessage): boolean {
   const token =
     (typeof req.headers["x-session-token"] === "string" ? req.headers["x-session-token"] : null) ||
-    body?.sessionToken ||
     (typeof req.headers["authorization"] === "string" && req.headers["x-vault-secret"]
       ? req.headers["authorization"].replace("Bearer ", "")
       : null);
@@ -187,9 +186,9 @@ export function createVaultHttpServer() {
 
       // 8. Add and encrypt AI API key
       if (method === "POST" && pathname === "/keys") {
-        const body = await readJsonBody<{ provider?: string; name?: string; apiKey?: string; sessionToken?: string }>(req);
+        const body = await readJsonBody<{ provider?: string; name?: string; apiKey?: string }>(req);
 
-        if (!authenticateSessionToken(req, body)) {
+        if (!authenticateSessionToken(req)) {
           sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
           return;
         }
@@ -262,9 +261,9 @@ export function createVaultHttpServer() {
 
       // 12. Create a new chat
       if (method === "POST" && pathname === "/chats") {
-        const body = await readJsonBody<{ title?: string; metadata?: Record<string, any>; sessionToken?: string }>(req);
+        const body = await readJsonBody<{ title?: string; metadata?: Record<string, any> }>(req);
 
-        if (!authenticateSessionToken(req, body)) {
+        if (!authenticateSessionToken(req)) {
           sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
           return;
         }
@@ -293,7 +292,7 @@ export function createVaultHttpServer() {
         const limitParam = url.searchParams.get("limit");
         const offsetParam = url.searchParams.get("offset");
         
-        const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+        const limit = limitParam ? Math.min(parseInt(limitParam, 10), 100) : 50;
         const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
 
         if ((limit !== undefined && Number.isNaN(limit)) || (offset !== undefined && Number.isNaN(offset))) {
@@ -313,10 +312,9 @@ export function createVaultHttpServer() {
           message?: string;
           provider?: string;
           model?: string;
-          sessionToken?: string;
         }>(req);
 
-        if (!authenticateSessionToken(req, body)) {
+        if (!authenticateSessionToken(req)) {
           sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
           return;
         }
@@ -359,7 +357,7 @@ export function createVaultHttpServer() {
         const offsetParam = url.searchParams.get("offset");
         const sortParam = url.searchParams.get("sort");
         
-        const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+        const limit = limitParam ? Math.min(parseInt(limitParam, 10), 100) : 50;
         const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
 
         if ((limit !== undefined && Number.isNaN(limit)) || (offset !== undefined && Number.isNaN(offset))) {
@@ -416,7 +414,7 @@ export function createVaultHttpServer() {
         return;
       }
 
-      if (err instanceof NoActiveApiKeyError) {
+      if (err instanceof NoActiveApiKeyError || err instanceof UnsupportedProviderError) {
         sendJson(res, 400, { error: err.message });
         return;
       }

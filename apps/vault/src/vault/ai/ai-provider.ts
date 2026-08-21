@@ -10,6 +10,7 @@ export interface AiExecutionParams {
   messages: ChatMessagePrompt[];
   provider?: string;
   model?: string;
+  maxOutputTokens?: number;
 }
 
 export interface AiExecutionResult {
@@ -27,6 +28,13 @@ export class NoActiveApiKeyError extends Error {
       : "No active API keys found in vault. Please add an API key first.";
     super(msg);
     this.name = "NoActiveApiKeyError";
+  }
+}
+
+export class UnsupportedProviderError extends Error {
+  constructor(provider: string) {
+    super(`Unsupported AI provider: "${provider}".`);
+    this.name = "UnsupportedProviderError";
   }
 }
 
@@ -54,20 +62,21 @@ export async function executeAiCompletion(params: AiExecutionParams): Promise<Ai
 
   if (provider === "google") {
     model = model || "gemini-3.7-flash";
-    result = await callGemini(apiKey, model, params.messages);
+    result = await callGemini(apiKey, model, params.messages, params.maxOutputTokens);
   } else if (provider === "anthropic") {
     model = model || "claude-sonnet-5";
-    result = await callAnthropic(apiKey, model, params.messages);
+    result = await callAnthropic(apiKey, model, params.messages, params.maxOutputTokens);
   } else if (provider === "deepseek") {
     model = model || "deepseek-v4-pro";
-    result = await callOpenAiCompatible("https://api.deepseek.com/chat/completions", apiKey, model, params.messages);
+    result = await callOpenAiCompatible("https://api.deepseek.com/chat/completions", apiKey, model, params.messages, params.maxOutputTokens);
   } else if (provider === "groq") {
     model = model || "openai/gpt-oss-120b";
-    result = await callOpenAiCompatible("https://api.groq.com/openai/v1/chat/completions", apiKey, model, params.messages);
-  } else {
-    // Default to OpenAI
+    result = await callOpenAiCompatible("https://api.groq.com/openai/v1/chat/completions", apiKey, model, params.messages, params.maxOutputTokens);
+  } else if (provider === "openai") {
     model = model || "gpt-5.6-sol";
-    result = await callOpenAiCompatible("https://api.openai.com/v1/chat/completions", apiKey, model, params.messages);
+    result = await callOpenAiCompatible("https://api.openai.com/v1/chat/completions", apiKey, model, params.messages, params.maxOutputTokens);
+  } else {
+    throw new UnsupportedProviderError(provider);
   }
 
   return {
@@ -82,22 +91,39 @@ export async function executeAiCompletion(params: AiExecutionParams): Promise<Ai
 async function callGemini(
   apiKey: string,
   model: string,
-  messages: ChatMessagePrompt[]
+  messages: ChatMessagePrompt[],
+  maxOutputTokens: number = 2000
 ): Promise<{ text: string; inputTokens?: number; outputTokens?: number }> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${apiKey}`;
-  
-  const contents = messages.map((m) => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
-  }));
+
+  const existingSystemMsg = messages.find((m) => m.role === "system")?.content || "";
+  const addedSystemMsg = "Be a friendly but 100% honest assistant. Truth is paramount regardless of emotions. Keep responses as concise as possible while remaining fully meaningful.";
+
+  const finalSystemInstructionText = existingSystemMsg
+    ? `${existingSystemMsg}\n\n${addedSystemMsg}`
+    : addedSystemMsg;
+
+  const contents = messages
+    .filter((m) => m.role !== "system")
+    .map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }],
+    }));
 
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      systemInstruction: {
+        parts: [{ text: finalSystemInstructionText }]
+      },
       contents,
       generationConfig: {
-        maxOutputTokens: 2000,
+        maxOutputTokens,
+        temperature: 0.4,
+        thinkingConfig: {
+          thinkingLevel: "medium"
+        }
       },
     }),
   });
@@ -132,7 +158,8 @@ async function callGemini(
 async function callAnthropic(
   apiKey: string,
   model: string,
-  messages: ChatMessagePrompt[]
+  messages: ChatMessagePrompt[],
+  maxTokens: number = 2000
 ): Promise<{ text: string; inputTokens?: number; outputTokens?: number }> {
   const url = "https://api.anthropic.com/v1/messages";
 
@@ -146,7 +173,7 @@ async function callAnthropic(
 
   const payload: Record<string, any> = {
     model,
-    max_tokens: 2000,
+    max_tokens: maxTokens,
     messages: conversation,
   };
 
@@ -193,7 +220,8 @@ async function callOpenAiCompatible(
   url: string,
   apiKey: string,
   model: string,
-  messages: ChatMessagePrompt[]
+  messages: ChatMessagePrompt[],
+  maxTokens: number = 2000
 ): Promise<{ text: string; inputTokens?: number; outputTokens?: number }> {
   const res = await fetch(url, {
     method: "POST",
@@ -203,7 +231,7 @@ async function callOpenAiCompatible(
     },
     body: JSON.stringify({
       model,
-      max_tokens: 2000,
+      max_tokens: maxTokens,
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
     }),
   });

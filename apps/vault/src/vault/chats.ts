@@ -13,7 +13,9 @@ import {
 import {
   createMessageRecord,
   getMessagesByChatId,
+  getLatestSequenceNumber,
 } from "../db/repository/messages.repository.js";
+import { getAllModels } from "../db/repository/models.repository.js";
 import { executeAiCompletion, type ChatMessagePrompt } from "./ai/ai-provider.js";
 import { ChatMetadata, ChatMessageDto } from "@ai-vault/types";
 
@@ -72,7 +74,7 @@ function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedChatFiel
       const inAad = buildFieldAad("chat", record.id, "input_tokens", record.encryption_version);
       const decIn = decryptBuffer({ ciphertext: record.encrypted_input_tokens, iv: record.input_tokens_iv, tag: record.input_tokens_tag }, dbKey, inAad);
       inputTokens = parseInt(decIn.toString("utf-8"), 10) || undefined;
-    } catch(e) {}
+    } catch (e) { }
   }
 
   if (record.encrypted_output_tokens && record.output_tokens_iv && record.output_tokens_tag) {
@@ -80,7 +82,7 @@ function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedChatFiel
       const outAad = buildFieldAad("chat", record.id, "output_tokens", record.encryption_version);
       const decOut = decryptBuffer({ ciphertext: record.encrypted_output_tokens, iv: record.output_tokens_iv, tag: record.output_tokens_tag }, dbKey, outAad);
       outputTokens = parseInt(decOut.toString("utf-8"), 10) || undefined;
-    } catch(e) {}
+    } catch (e) { }
   }
 
   return { metadata, inputTokens, outputTokens };
@@ -355,7 +357,7 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
   if (params.chatId && activeChatLocks.has(params.chatId)) {
     throw new Error("AI is already processing a message in this chat. Please wait.");
   }
-  
+
   if (params.chatId) {
     activeChatLocks.add(params.chatId);
   }
@@ -388,8 +390,38 @@ async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<S
   let chatRecord: ChatRecord | null = null;
 
   if (params.chatId) {
-    chat = await getChat(params.chatId);
     chatRecord = await getChatRecordById(params.chatId);
+    if (!chatRecord || chatRecord.status !== "ACTIVE") {
+      throw new ChatNotFoundError();
+    }
+
+    let title = "Untitled Chat";
+    try {
+      const titleAad = buildFieldAad("chat", chatRecord.id, "title", chatRecord.encryption_version);
+      const decTitle = decryptBuffer(
+        {
+          ciphertext: chatRecord.encrypted_title,
+          iv: chatRecord.title_iv,
+          tag: chatRecord.title_tag,
+        },
+        dbKey,
+        titleAad
+      );
+      title = decTitle.toString("utf-8");
+    } catch (e) {
+      console.warn(`[_sendMessageAndExecuteInner] Decryption failed for chat title (${chatRecord.id}):`, e);
+    }
+    const fields = decryptChatFields(chatRecord, dbKey);
+    chat = {
+      id: chatRecord.id,
+      title,
+      status: chatRecord.status,
+      metadata: fields.metadata,
+      inputTokens: fields.inputTokens,
+      outputTokens: fields.outputTokens,
+      createdAt: chatRecord.created_at.toISOString(),
+      updatedAt: chatRecord.updated_at.toISOString(),
+    };
   } else {
     // Automatically create a new chat with derived title
     const derivedTitle = deriveTitleFromPrompt(trimmedMessage);
@@ -405,13 +437,73 @@ async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<S
 
   // Retrieve prior conversation messages for context
   const existingMessages = await getChatMessages(chat.id, 100, 0, "desc");
-  
-  const maxTokens = 2500;
+
+  /**
+   * Dynamically calculate max context tokens based on model price (to save costs while retaining context):
+   * - Ultra Cheap models (<= $0.20/1M): allow up to 32,000 context tokens.
+   * - Budget models (<= $0.50/1M): allow up to 16,000 context tokens.
+   * - Moderate models (<= $1.50/1M): allow up to 8,000 context tokens.
+   * - Expensive / Frontier models (<= $4.00/1M): allow up to 4,000 context tokens.
+   * - Very Expensive Flagships (> $4.00/1M): conserve aggressively with 2,500 context tokens.
+   */
+  let maxTokens = 6000;
+  let maxOutputTokens: number | undefined = undefined;
+  try {
+    const allModels = await getAllModels();
+    const activeProvider = params.provider || chat.metadata?.provider || "google";
+    const activeModel = params.model || chat.metadata?.model || "gemini-3.7-flash";
+    
+    const dbModel = allModels.find(
+      (m) =>
+        m.provider.toLowerCase() === activeProvider.toLowerCase() &&
+        m.name.toLowerCase() === activeModel.toLowerCase()
+    );
+
+    if (dbModel) {
+      const inputCost = dbModel.input_price_per_1m ? Number(dbModel.input_price_per_1m) : null;
+      const outputCost = dbModel.output_price_per_1m ? Number(dbModel.output_price_per_1m) : null;
+      const contextLimit = dbModel.context_window ? Math.max(dbModel.context_window - 2000, 2000) : 100000;
+
+      if (inputCost !== null) {
+        if (inputCost <= 0.20) {
+          maxTokens = 32000; // Ultra cheap (e.g. Flash-Lite, GPT-5.6 Luna, OSS 20B)
+        } else if (inputCost <= 0.50) {
+          maxTokens = 16000; // Budget (e.g. Gemini 3.7 Flash, OSS 120B, DeepSeek V4)
+        } else if (inputCost <= 1.50) {
+          maxTokens = 8000;  // Moderate (e.g. Gemini 3.5/3.6 Flash, Claude Haiku)
+        } else if (inputCost <= 4.00) {
+          maxTokens = 4000;  // Expensive (e.g. Gemini 3.1 Pro, Claude Sonnet, GPT-5.6 Terra)
+        } else {
+          maxTokens = 2500;  // Very Expensive (e.g. GPT-5.6 Sol, Claude Fable/Opus)
+        }
+      } else {
+        maxTokens = 6000;
+      }
+
+      if (outputCost !== null) {
+        if (outputCost <= 0.50) {
+          maxOutputTokens = 4000; // Very cheap output
+        } else if (outputCost <= 2.50) {
+          maxOutputTokens = 2500; // Moderate output
+        } else if (outputCost <= 10.00) {
+          maxOutputTokens = 1500; // Expensive output
+        } else {
+          maxOutputTokens = 800;  // Very Expensive output (e.g. GPT-5.6 Sol, Claude Opus)
+        }
+      }
+
+      // Ensure we do not exceed model physical context window
+      maxTokens = Math.min(maxTokens, contextLimit);
+    }
+  } catch (e) {
+    console.warn("Failed to determine dynamic maxTokens from model cost, using default fallback:", e);
+  }
+
   const userMessageTokens = Math.ceil(trimmedMessage.length / 4);
   let currentTokens = userMessageTokens;
-  
+
   const includedMessages: typeof existingMessages = [];
-  
+
   for (const m of existingMessages) {
     const mTokens = m.inputTokens ? m.inputTokens : Math.ceil(m.content.length / 4);
     if (currentTokens + mTokens > maxTokens) {
@@ -420,10 +512,10 @@ async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<S
     currentTokens += mTokens;
     includedMessages.push(m);
   }
-  
+
   includedMessages.reverse(); // Put them in chronological order
-  
-  const latestSeq = existingMessages.length > 0 ? existingMessages[0].sequenceNumber : 0;
+
+  const latestSeq = await getLatestSequenceNumber(chat.id);
 
   // 1. Prepare prompt context for AI completion
   const promptContext: ChatMessagePrompt[] = [
@@ -431,14 +523,7 @@ async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<S
     { role: "user", content: trimmedMessage },
   ];
 
-  // 2. Execute AI generation
-  const aiResult = await executeAiCompletion({
-    messages: promptContext,
-    provider: params.provider,
-    model: params.model,
-  });
-
-  // 3. Encrypt and store user message (Now happens AFTER successful AI generation)
+  // 2. Encrypt and store user message BEFORE AI generation to prevent data loss
   const userMsgId = randomUUID();
   const userAad = buildFieldAad("message", userMsgId, "content", 1);
   const encUserContent = encryptBuffer(Buffer.from(trimmedMessage, "utf-8"), dbKey, userAad);
@@ -464,6 +549,14 @@ async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<S
     updatedAt: userRecord.updated_at.toISOString(),
   };
 
+  // 3. Execute AI generation
+  const aiResult = await executeAiCompletion({
+    messages: promptContext,
+    provider: params.provider,
+    model: params.model,
+    maxOutputTokens,
+  });
+
   // 4. Encrypt and store assistant message
   const assistantMsgId = randomUUID();
   const assistantAad = buildFieldAad("message", assistantMsgId, "content", 1);
@@ -483,40 +576,40 @@ async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<S
     encTokensCipher = encTokens.ciphertext;
     tokensIv = encTokens.iv;
     tokensTag = encTokens.tag;
-    
+
     // Update Chat Tokens
     if (chatRecord) {
       let chatInputTokens = 0;
       let chatOutputTokens = 0;
-      
+
       if (chatRecord.encrypted_input_tokens && chatRecord.input_tokens_iv && chatRecord.input_tokens_tag) {
         try {
           const inAad = buildFieldAad("chat", chat.id, "input_tokens", chatRecord.encryption_version);
           const decIn = decryptBuffer({ ciphertext: chatRecord.encrypted_input_tokens, iv: chatRecord.input_tokens_iv, tag: chatRecord.input_tokens_tag }, dbKey, inAad);
           chatInputTokens = parseInt(decIn.toString("utf-8"), 10) || 0;
-        } catch (e) {}
+        } catch (e) { }
       }
-      
+
       if (chatRecord.encrypted_output_tokens && chatRecord.output_tokens_iv && chatRecord.output_tokens_tag) {
         try {
           const outAad = buildFieldAad("chat", chat.id, "output_tokens", chatRecord.encryption_version);
           const decOut = decryptBuffer({ ciphertext: chatRecord.encrypted_output_tokens, iv: chatRecord.output_tokens_iv, tag: chatRecord.output_tokens_tag }, dbKey, outAad);
           chatOutputTokens = parseInt(decOut.toString("utf-8"), 10) || 0;
-        } catch (e) {}
+        } catch (e) { }
       }
-      
+
       chatInputTokens += (aiResult.inputTokens || 0);
       chatOutputTokens += (aiResult.outputTokens || 0);
-      
+
       chat.inputTokens = chatInputTokens;
       chat.outputTokens = chatOutputTokens;
-      
+
       const inAad = buildFieldAad("chat", chat.id, "input_tokens", chatRecord.encryption_version);
       const encIn = encryptBuffer(Buffer.from(chatInputTokens.toString(), "utf-8"), dbKey, inAad);
-      
+
       const outAad = buildFieldAad("chat", chat.id, "output_tokens", chatRecord.encryption_version);
       const encOut = encryptBuffer(Buffer.from(chatOutputTokens.toString(), "utf-8"), dbKey, outAad);
-      
+
       await updateChatRecord(chat.id, {
         encrypted_input_tokens: encIn.ciphertext,
         input_tokens_iv: encIn.iv,

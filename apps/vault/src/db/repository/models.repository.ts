@@ -8,6 +8,8 @@ export interface CreateModelData {
   display_name: string;
   description?: string | null;
   context_window?: number | null;
+  input_price_per_1m?: number | null;
+  output_price_per_1m?: number | null;
   is_active?: boolean;
 }
 
@@ -18,6 +20,8 @@ export interface ModelRecord {
   display_name: string;
   description: string | null;
   context_window: number | null;
+  input_price_per_1m?: any | null;
+  output_price_per_1m?: any | null;
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
@@ -60,6 +64,8 @@ export async function createModelRecord(data: CreateModelData): Promise<ModelRec
       display_name: data.display_name,
       description: data.description ?? null,
       context_window: data.context_window ?? null,
+      input_price_per_1m: data.input_price_per_1m ?? null,
+      output_price_per_1m: data.output_price_per_1m ?? null,
       is_active: data.is_active ?? true,
     },
   });
