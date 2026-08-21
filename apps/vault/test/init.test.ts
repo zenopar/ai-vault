@@ -79,4 +79,22 @@ describe("POST /init (Unit Tests / In-Memory Mock DB)", () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("masterPassword is required and must be a string.");
   });
+
+  it("should handle failure during initialization safely without unlocking", async () => {
+    vi.spyOn(prisma.vault_config, "create").mockRejectedValueOnce(new Error("DB Connection Error"));
+
+    const res = await request(server)
+      .post("/init")
+      .set("x-vault-secret", "test-secret")
+      .send({ masterPassword: "test-password" });
+
+    expect(res.status).toBe(500);
+
+    const statusRes = await request(server)
+      .get("/status")
+      .set("x-vault-secret", "test-secret");
+
+    expect(statusRes.status).toBe(200);
+    expect(statusRes.body.status).toBe("UNINITIALIZED");
+  });
 });
