@@ -300,10 +300,40 @@ export function ChatInterface({ initialChats, initialKeys }: ChatInterfaceProps)
               <span className="font-semibold text-gray-700 truncate mr-4">
                 {chats.find((c) => c.id === activeChatId)?.title || "Untitled Chat"}
               </span>
-              <div className="font-mono flex items-center gap-2 whitespace-nowrap">
-                <span>Total in: <strong className="text-gray-700 font-bold">{chats.find((c) => c.id === activeChatId)?.inputTokens ?? 0}</strong></span>
-                <span>•</span>
-                <span>Total out: <strong className="text-gray-700 font-bold">{chats.find((c) => c.id === activeChatId)?.outputTokens ?? 0}</strong></span>
+              <div className="font-mono flex items-center gap-3 whitespace-nowrap bg-gray-50 border border-gray-100 px-3 py-1.5 rounded-lg shadow-sm">
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Input</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-gray-700 font-bold">{chats.find((c) => c.id === activeChatId)?.inputTokens ?? 0}</span>
+                    {chats.find((c) => c.id === activeChatId)?.inputCost !== undefined && (
+                      <span className="text-emerald-600 text-xs font-medium">(${chats.find((c) => c.id === activeChatId)?.inputCost?.toFixed(6)})</span>
+                    )}
+                  </div>
+                </div>
+                <div className="w-px h-6 bg-gray-200"></div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Output</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-gray-700 font-bold">{chats.find((c) => c.id === activeChatId)?.outputTokens ?? 0}</span>
+                    {chats.find((c) => c.id === activeChatId)?.outputCost !== undefined && (
+                      <span className="text-emerald-600 text-xs font-medium">(${chats.find((c) => c.id === activeChatId)?.outputCost?.toFixed(6)})</span>
+                    )}
+                  </div>
+                </div>
+                {chats.find((c) => c.id === activeChatId)?.totalCost !== undefined && (
+                  <>
+                    <div className="w-px h-6 bg-gray-200"></div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Total Cost</span>
+                      <span className="text-emerald-600 font-bold flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        ${chats.find((c) => c.id === activeChatId)?.totalCost?.toFixed(6)}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -338,11 +368,19 @@ export function ChatInterface({ initialChats, initialKeys }: ChatInterfaceProps)
                       {m.role === "user" ? "You" : "AI"}
                     </div>
 
-                    {(m.inputTokens !== undefined || m.outputTokens !== undefined) && (
+                    {(m.inputTokens !== undefined || m.outputTokens !== undefined || m.cost !== undefined) && (
                       <div className="text-[10px] text-gray-400 font-mono flex items-center gap-2">
-                        <span>in: <strong className="text-gray-600 font-bold">{m.inputTokens ?? 0}</strong></span>
-                        <span>•</span>
-                        <span>out: <strong className="text-gray-600 font-bold">{m.outputTokens ?? 0}</strong></span>
+                        {m.inputTokens !== undefined && <span>in: <strong className="text-gray-600 font-bold">{m.inputTokens}</strong></span>}
+                        {m.inputTokens !== undefined && m.outputTokens !== undefined && <span>•</span>}
+                        {m.outputTokens !== undefined && <span>out: <strong className="text-gray-600 font-bold">{m.outputTokens}</strong></span>}
+                        {m.cost !== undefined && (
+                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-full font-bold ml-1 flex items-center gap-1 shadow-sm transition-transform hover:scale-105">
+                            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            ${m.cost.toFixed(6)}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
