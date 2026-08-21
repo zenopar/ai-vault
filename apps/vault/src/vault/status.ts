@@ -8,8 +8,6 @@ export interface VaultKdfParams {
   memoryCost: number;
   timeCost: number;
   parallelism: number;
-  salt: string;
-  recoverySalt: string;
 }
 
 export interface VaultStatusResult {
@@ -48,8 +46,6 @@ export async function getVaultStatus(): Promise<VaultStatusResult> {
         memoryCost: config.kdf_memory_cost,
         timeCost: config.kdf_time_cost,
         parallelism: config.kdf_parallelism,
-        salt: config.kdf_salt,
-        recoverySalt: config.recovery_kdf_salt,
       },
       unlockedAt: vaultState.getUnlockedAt()?.toISOString() ?? null,
       createdAt: config.created_at.toISOString(),

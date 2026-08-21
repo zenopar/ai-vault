@@ -49,7 +49,8 @@ describe("Vault Status Service", () => {
     expect(status.isUnlocked).toBe(false);
     expect(status.version).toBe(1);
     expect(status.kdfParams?.algorithm).toBe("argon2id");
-    expect(status.kdfParams?.salt).toBe("aabbcc112233");
+    expect((status.kdfParams as any)?.salt).toBeUndefined();
+    expect((status.kdfParams as any)?.recoverySalt).toBeUndefined();
   });
 
   it("should return UNLOCKED when vaultState is unlocked", async () => {

@@ -67,6 +67,8 @@ describe("Vault HTTP Server", () => {
     expect(res.body.status).toBe("LOCKED");
     expect(res.body.isUnlocked).toBe(false);
     expect(res.body.kdfParams.algorithm).toBe("argon2id");
+    expect(res.body.kdfParams.salt).toBeUndefined();
+    expect(res.body.kdfParams.recoverySalt).toBeUndefined();
   });
 
   it("should reject requests from external (non-loopback) IP addresses with 403", async () => {
