@@ -89,6 +89,9 @@ export async function listChats(limit?: number, offset?: number): Promise<ChatMe
       metadata: fields.metadata,
       inputTokens: fields.inputTokens,
       outputTokens: fields.outputTokens,
+      inputCost: fields.inputCost,
+      outputCost: fields.outputCost,
+      totalCost: fields.totalCost,
       createdAt: record.created_at.toISOString(),
       updatedAt: record.updated_at.toISOString(),
     });
@@ -119,6 +122,9 @@ export async function getChat(id: string): Promise<ChatMetadata> {
     metadata: fields.metadata,
     inputTokens: fields.inputTokens,
     outputTokens: fields.outputTokens,
+    inputCost: fields.inputCost,
+    outputCost: fields.outputCost,
+    totalCost: fields.totalCost,
     createdAt: record.created_at.toISOString(),
     updatedAt: record.updated_at.toISOString(),
   };
@@ -176,6 +182,26 @@ export async function getChatMessages(
       }
     }
 
+    let cost: number | undefined = undefined;
+    if (msg.encrypted_cost && msg.cost_iv && msg.cost_tag) {
+      try {
+        const costAad = buildFieldAad("message", msg.id, "cost", msg.encryption_version);
+        const decCost = decryptBuffer(
+          {
+            ciphertext: msg.encrypted_cost,
+            iv: msg.cost_iv,
+            tag: msg.cost_tag,
+          },
+          dbKey,
+          costAad
+        );
+        const parsedCost = parseFloat(decCost.toString("utf-8"));
+        cost = Number.isNaN(parsedCost) ? undefined : parsedCost;
+      } catch (e) {
+        console.warn(`[getChatMessages] Decryption failed for message cost (${msg.id}):`, e);
+      }
+    }
+
     messages.push({
       id: msg.id,
       chatId: msg.chat_id,
@@ -184,6 +210,7 @@ export async function getChatMessages(
       sequenceNumber: msg.sequence_number,
       inputTokens,
       outputTokens,
+      cost,
       createdAt: msg.created_at.toISOString(),
       updatedAt: msg.updated_at.toISOString(),
     });

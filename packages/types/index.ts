@@ -106,6 +106,7 @@ export interface ChatMessageDto {
   sequenceNumber: number;
   inputTokens?: number;
   outputTokens?: number;
+  cost?: number;
   createdAt: string;
   updatedAt: string;
 }

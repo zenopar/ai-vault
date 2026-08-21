@@ -33,6 +33,9 @@ export interface DecryptedChatFields {
   metadata: Record<string, any> | null;
   inputTokens?: number;
   outputTokens?: number;
+  inputCost?: number;
+  outputCost?: number;
+  totalCost?: number;
 }
 
 /**
@@ -73,7 +76,38 @@ export function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedC
     } catch (e) { console.warn(`Failed to decrypt output_tokens for chat ${record.id}:`, e); }
   }
 
-  return { metadata, inputTokens, outputTokens };
+  let inputCost: number | undefined;
+  let outputCost: number | undefined;
+  let totalCost: number | undefined;
+
+  if (record.encrypted_input_cost && record.input_cost_iv && record.input_cost_tag) {
+    try {
+      const inCostAad = buildFieldAad("chat", record.id, "input_cost", record.encryption_version);
+      const decInCost = decryptBuffer({ ciphertext: record.encrypted_input_cost, iv: record.input_cost_iv, tag: record.input_cost_tag }, dbKey, inCostAad);
+      const parsedInCost = parseFloat(decInCost.toString("utf-8"));
+      inputCost = Number.isNaN(parsedInCost) ? undefined : parsedInCost;
+    } catch (e) { console.warn(`Failed to decrypt input_cost for chat ${record.id}:`, e); }
+  }
+
+  if (record.encrypted_output_cost && record.output_cost_iv && record.output_cost_tag) {
+    try {
+      const outCostAad = buildFieldAad("chat", record.id, "output_cost", record.encryption_version);
+      const decOutCost = decryptBuffer({ ciphertext: record.encrypted_output_cost, iv: record.output_cost_iv, tag: record.output_cost_tag }, dbKey, outCostAad);
+      const parsedOutCost = parseFloat(decOutCost.toString("utf-8"));
+      outputCost = Number.isNaN(parsedOutCost) ? undefined : parsedOutCost;
+    } catch (e) { console.warn(`Failed to decrypt output_cost for chat ${record.id}:`, e); }
+  }
+
+  if (record.encrypted_total_cost && record.total_cost_iv && record.total_cost_tag) {
+    try {
+      const totalCostAad = buildFieldAad("chat", record.id, "total_cost", record.encryption_version);
+      const decTotalCost = decryptBuffer({ ciphertext: record.encrypted_total_cost, iv: record.total_cost_iv, tag: record.total_cost_tag }, dbKey, totalCostAad);
+      const parsedTotalCost = parseFloat(decTotalCost.toString("utf-8"));
+      totalCost = Number.isNaN(parsedTotalCost) ? undefined : parsedTotalCost;
+    } catch (e) { console.warn(`Failed to decrypt total_cost for chat ${record.id}:`, e); }
+  }
+
+  return { metadata, inputTokens, outputTokens, inputCost, outputCost, totalCost };
 }
 
 /**
