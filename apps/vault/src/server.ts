@@ -37,29 +37,50 @@ import {
 
 function readJsonBody<T = any>(req: IncomingMessage): Promise<T> {
   return new Promise((resolve, reject) => {
-    let body = "";
+    const chunks: Buffer[] = [];
     let size = 0;
     const MAX_SIZE = 1024 * 1024; // 1 MB limit
 
-    req.on("data", (chunk) => {
-      size += chunk.length;
+    req.on("data", (chunk: Buffer | string) => {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      size += buf.length;
       if (size > MAX_SIZE) {
         req.destroy();
+        for (const c of chunks) {
+          c.fill(0);
+        }
         reject(new Error("Payload too large"));
         return;
       }
-      body += chunk.toString();
+      chunks.push(buf);
     });
 
     req.on("end", () => {
+      let combined: Buffer | null = null;
       try {
-        resolve(body ? JSON.parse(body) : ({} as T));
+        if (chunks.length === 0) {
+          resolve({} as T);
+          return;
+        }
+        combined = Buffer.concat(chunks, size);
+        const parsed = JSON.parse(combined.toString("utf-8"));
+        resolve(parsed);
       } catch (e) {
         reject(new Error("Invalid JSON"));
+      } finally {
+        for (const chunk of chunks) {
+          chunk.fill(0);
+        }
+        combined?.fill(0);
       }
     });
 
-    req.on("error", reject);
+    req.on("error", (err) => {
+      for (const chunk of chunks) {
+        chunk.fill(0);
+      }
+      reject(err);
+    });
   });
 }
 
