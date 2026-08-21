@@ -139,6 +139,10 @@ export async function getDecryptedApiKey(id: string): Promise<string> {
  * Deletes an AI API key record from the database.
  */
 export async function removeApiKey(id: string): Promise<boolean> {
+  if (!vaultState.isUnlocked()) {
+    throw new VaultLockedError();
+  }
+
   const existing = await getApiKeyRecordById(id);
   if (!existing) {
     throw new ApiKeyNotFoundError();
