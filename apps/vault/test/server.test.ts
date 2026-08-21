@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { IncomingMessage, type ServerResponse } from "node:http";
+import { EventEmitter } from "node:events";
 import { createVaultHttpServer } from "../src/server.js";
 import { vaultState } from "../src/vault/state.js";
 import * as clientModule from "../src/db/client.js";
@@ -65,5 +67,46 @@ describe("Vault HTTP Server", () => {
     expect(res.body.status).toBe("LOCKED");
     expect(res.body.isUnlocked).toBe(false);
     expect(res.body.kdfParams.algorithm).toBe("argon2id");
+  });
+
+  it("should reject requests from external (non-loopback) IP addresses with 403", async () => {
+    const mockSocket: any = new EventEmitter();
+    mockSocket.remoteAddress = "192.168.1.100";
+
+    const mockReq = new IncomingMessage(mockSocket as any);
+    mockReq.headers = { host: "localhost" };
+    mockReq.url = "/health";
+    mockReq.method = "GET";
+
+    let statusCode = 0;
+    let responseBody = "";
+
+    const mockRes = {
+      setHeader: vi.fn(),
+      writeHead: vi.fn((code) => {
+        statusCode = code;
+      }),
+      end: vi.fn((data) => {
+        responseBody = data;
+      }),
+    } as unknown as ServerResponse;
+
+    server.emit("request", mockReq, mockRes);
+
+    expect(statusCode).toBe(403);
+    expect(JSON.parse(responseBody)).toEqual({
+      error: "Forbidden: Vault is only accessible from localhost",
+    });
+  });
+
+  it("should reject requests with invalid Host headers (non-localhost) with 403", async () => {
+    const res = await request(server)
+      .get("/health")
+      .set("Host", "external-evil-site.com");
+
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({
+      error: "Forbidden: Invalid Host header. Vault only accepts localhost/127.0.0.1",
+    });
   });
 });

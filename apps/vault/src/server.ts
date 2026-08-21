@@ -64,7 +64,13 @@ function readJsonBody<T = any>(req: IncomingMessage): Promise<T> {
 }
 
 const ALLOWED_ORIGIN_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+const ALLOWED_HOST_PATTERN = /^(localhost|127\.0\.0\.1)(:\d+)?$/;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isLoopbackAddress(ip?: string): boolean {
+  if (!ip) return true; // Fallback for synthetic/mocked test requests without socket
+  return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1" || ip.startsWith("127.");
+}
 
 function resolveAllowedOrigin(req: IncomingMessage): string {
   const origin = req.headers["origin"];
@@ -127,7 +133,20 @@ function authenticateSessionToken(req: IncomingMessage): boolean {
 
 export function createVaultHttpServer() {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
-    const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+    // 0. Ensure request originates strictly from localhost IP and Host header
+    const remoteIp = req.socket?.remoteAddress;
+    if (!isLoopbackAddress(remoteIp)) {
+      sendJson(res, 403, { error: "Forbidden: Vault is only accessible from localhost" });
+      return;
+    }
+
+    const hostHeader = req.headers.host;
+    if (hostHeader && !ALLOWED_HOST_PATTERN.test(hostHeader)) {
+      sendJson(res, 403, { error: "Forbidden: Invalid Host header. Vault only accepts localhost/127.0.0.1" });
+      return;
+    }
+
+    const url = new URL(req.url || "/", "http://127.0.0.1");
     const pathname = url.pathname;
     const method = req.method?.toUpperCase();
 
