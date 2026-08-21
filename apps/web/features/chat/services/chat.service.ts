@@ -16,8 +16,8 @@ export async function listChatsService(limit = 50, offset = 0): Promise<ChatMeta
   }
 
   const params = new URLSearchParams();
-  if (limit) params.append("limit", limit.toString());
-  if (offset) params.append("offset", offset.toString());
+  if (limit !== undefined) params.append("limit", limit.toString());
+  if (offset !== undefined) params.append("offset", offset.toString());
   const query = params.toString() ? `?${params.toString()}` : "";
 
   const response = await VaultApiClient.sendGetRequest<ListChatsResponse>(`/chats${query}`, {
@@ -50,8 +50,8 @@ export async function getChatMessagesService(
   }
 
   const params = new URLSearchParams();
-  if (limit) params.append("limit", limit.toString());
-  if (offset) params.append("offset", offset.toString());
+  if (limit !== undefined) params.append("limit", limit.toString());
+  if (offset !== undefined) params.append("offset", offset.toString());
   if (sort) params.append("sort", sort);
   const query = params.toString() ? `?${params.toString()}` : "";
 
