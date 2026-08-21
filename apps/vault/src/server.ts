@@ -20,7 +20,7 @@ import {
   sendMessageAndExecute,
   removeChat,
   ChatNotFoundError
-} from "./vault/chats.js";
+} from "./vault/chats/index.js";
 import { NoActiveApiKeyError, UnsupportedProviderError } from "./vault/ai/ai-provider.js";
 import { vaultState } from "./vault/state.js";
 import {

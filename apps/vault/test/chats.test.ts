@@ -3,7 +3,7 @@ import { createVaultHttpServer } from "../src/server.js";
 import { config } from "../src/config.js";
 import { vaultState } from "../src/vault/state.js";
 import { initVault } from "../src/vault/init.js";
-import { getDecryptedChatTitle } from "../src/vault/chats.js";
+import { decryptChatTitle } from "../src/vault/chats/index.js";
 import { createInMemoryPrismaMock } from "./helpers/mockDb.js";
 import request from "supertest";
 
@@ -11,6 +11,12 @@ describe("Chats API (Unit Tests / In-Memory Mock DB)", () => {
   const server = createVaultHttpServer();
   const dbMock = createInMemoryPrismaMock();
   const prisma = dbMock.mockPrisma;
+
+  async function getDecryptedChatTitle(chatId: string) {
+    const record = await prisma.chats.findUnique({ where: { id: chatId } });
+    if (!record) throw new Error("Not found");
+    return decryptChatTitle(record, vaultState.getDbKey()!, false);
+  }
 
   beforeAll(() => {
     config.ipcSecret = "test-secret";
