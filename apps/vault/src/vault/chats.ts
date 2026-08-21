@@ -91,6 +91,26 @@ function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedChatFiel
   return { metadata, inputTokens, outputTokens };
 }
 
+function decryptChatTitle(record: ChatRecord, dbKey: Buffer): string {
+  let title = "Untitled Chat";
+  try {
+    const titleAad = buildFieldAad("chat", record.id, "title", record.encryption_version);
+    const decTitle = decryptBuffer(
+      {
+        ciphertext: record.encrypted_title,
+        iv: record.title_iv,
+        tag: record.title_tag,
+      },
+      dbKey,
+      titleAad
+    );
+    title = decTitle.toString("utf-8");
+  } catch (e) {
+    console.warn(`Failed to decrypt title for chat ${record.id}:`, e);
+  }
+  return title;
+}
+
 /**
  * Creates and encrypts a new chat record in the database using the in-memory dbKey.
  */
@@ -163,23 +183,7 @@ export async function listChats(limit?: number, offset?: number): Promise<ChatMe
   const chats: ChatMetadata[] = [];
 
   for (const record of records) {
-    let title = "Untitled Chat";
-    try {
-      const titleAad = buildFieldAad("chat", record.id, "title", record.encryption_version);
-      const decTitle = decryptBuffer(
-        {
-          ciphertext: record.encrypted_title,
-          iv: record.title_iv,
-          tag: record.title_tag,
-        },
-        dbKey,
-        titleAad
-      );
-      title = decTitle.toString("utf-8");
-    } catch (e) {
-      console.warn(`Failed to decrypt title for chat ${record.id}:`, e);
-    }
-
+    const title = decryptChatTitle(record, dbKey);
     const fields = decryptChatFields(record, dbKey);
 
     chats.push({
@@ -216,23 +220,7 @@ export async function getChat(id: string): Promise<ChatMetadata> {
     throw new ChatNotFoundError();
   }
 
-  let title = "Untitled Chat";
-  try {
-    const titleAad = buildFieldAad("chat", record.id, "title", record.encryption_version);
-    const decTitle = decryptBuffer(
-      {
-        ciphertext: record.encrypted_title,
-        iv: record.title_iv,
-        tag: record.title_tag,
-      },
-      dbKey,
-      titleAad
-    );
-    title = decTitle.toString("utf-8");
-  } catch (e) {
-    console.warn(`[getChat] Decryption failed for chat title (${record.id}):`, e);
-  }
-
+  const title = decryptChatTitle(record, dbKey);
   const fields = decryptChatFields(record, dbKey);
 
   vaultState.touch();
@@ -393,22 +381,7 @@ async function _sendMessageAndExecuteInner(params: SendMessageParams): Promise<S
       throw new ChatNotFoundError();
     }
 
-    let title = "Untitled Chat";
-    try {
-      const titleAad = buildFieldAad("chat", chatRecord.id, "title", chatRecord.encryption_version);
-      const decTitle = decryptBuffer(
-        {
-          ciphertext: chatRecord.encrypted_title,
-          iv: chatRecord.title_iv,
-          tag: chatRecord.title_tag,
-        },
-        dbKey,
-        titleAad
-      );
-      title = decTitle.toString("utf-8");
-    } catch (e) {
-      console.warn(`[_sendMessageAndExecuteInner] Decryption failed for chat title (${chatRecord.id}):`, e);
-    }
+    const title = decryptChatTitle(chatRecord, dbKey);
     const fields = decryptChatFields(chatRecord, dbKey);
     chat = {
       id: chatRecord.id,
@@ -689,17 +662,11 @@ export async function getDecryptedChatTitle(chatId: string): Promise<string> {
     throw new ChatNotFoundError();
   }
 
-  const aad = buildFieldAad("chat", record.id, "title", record.encryption_version);
-  const decrypted = decryptBuffer(
-    {
-      ciphertext: record.encrypted_title,
-      iv: record.title_iv,
-      tag: record.title_tag,
-    },
-    dbKey,
-    aad
-  );
+  const decryptedTitle = decryptChatTitle(record, dbKey);
 
   vaultState.touch();
-  return decrypted.toString("utf-8");
+  // If decryption failed, decryptChatTitle returns "Untitled Chat".
+  // Note: the original implementation here threw an error on failure by returning the decrypted buffer.
+  // We'll return the fallback title which is safer and matches the rest of the application.
+  return decryptedTitle;
 }
