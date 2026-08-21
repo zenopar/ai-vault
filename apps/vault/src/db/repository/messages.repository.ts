@@ -12,24 +12,6 @@ export interface CreateMessageData {
   encrypted_content: string;
   content_iv: string;
   content_tag: string;
-  encrypted_input_tokens?: string | null;
-  input_tokens_iv?: string | null;
-  input_tokens_tag?: string | null;
-  encrypted_output_tokens?: string | null;
-  output_tokens_iv?: string | null;
-  output_tokens_tag?: string | null;
-  encrypted_thought_tokens?: string | null;
-  thought_tokens_iv?: string | null;
-  thought_tokens_tag?: string | null;
-  encrypted_input_cost?: string | null;
-  input_cost_iv?: string | null;
-  input_cost_tag?: string | null;
-  encrypted_output_cost?: string | null;
-  output_cost_iv?: string | null;
-  output_cost_tag?: string | null;
-  encrypted_thought_cost?: string | null;
-  thought_cost_iv?: string | null;
-  thought_cost_tag?: string | null;
   encrypted_metadata?: string | null;
   metadata_iv?: string | null;
   metadata_tag?: string | null;
@@ -46,24 +28,6 @@ export interface MessageRecord {
   encrypted_content: string;
   content_iv: string;
   content_tag: string;
-  encrypted_input_tokens: string | null;
-  input_tokens_iv: string | null;
-  input_tokens_tag: string | null;
-  encrypted_output_tokens: string | null;
-  output_tokens_iv: string | null;
-  output_tokens_tag: string | null;
-  encrypted_thought_tokens: string | null;
-  thought_tokens_iv: string | null;
-  thought_tokens_tag: string | null;
-  encrypted_input_cost: string | null;
-  input_cost_iv: string | null;
-  input_cost_tag: string | null;
-  encrypted_output_cost: string | null;
-  output_cost_iv: string | null;
-  output_cost_tag: string | null;
-  encrypted_thought_cost: string | null;
-  thought_cost_iv: string | null;
-  thought_cost_tag: string | null;
   encrypted_metadata: string | null;
   metadata_iv: string | null;
   metadata_tag: string | null;
@@ -85,24 +49,6 @@ export async function createMessageRecord(data: CreateMessageData): Promise<Mess
       encrypted_content: data.encrypted_content,
       content_iv: data.content_iv,
       content_tag: data.content_tag,
-      encrypted_input_tokens: data.encrypted_input_tokens ?? null,
-      input_tokens_iv: data.input_tokens_iv ?? null,
-      input_tokens_tag: data.input_tokens_tag ?? null,
-      encrypted_output_tokens: data.encrypted_output_tokens ?? null,
-      output_tokens_iv: data.output_tokens_iv ?? null,
-      output_tokens_tag: data.output_tokens_tag ?? null,
-      encrypted_thought_tokens: data.encrypted_thought_tokens ?? null,
-      thought_tokens_iv: data.thought_tokens_iv ?? null,
-      thought_tokens_tag: data.thought_tokens_tag ?? null,
-      encrypted_input_cost: data.encrypted_input_cost ?? null,
-      input_cost_iv: data.input_cost_iv ?? null,
-      input_cost_tag: data.input_cost_tag ?? null,
-      encrypted_output_cost: data.encrypted_output_cost ?? null,
-      output_cost_iv: data.output_cost_iv ?? null,
-      output_cost_tag: data.output_cost_tag ?? null,
-      encrypted_thought_cost: data.encrypted_thought_cost ?? null,
-      thought_cost_iv: data.thought_cost_iv ?? null,
-      thought_cost_tag: data.thought_cost_tag ?? null,
       encrypted_metadata: data.encrypted_metadata ?? null,
       metadata_iv: data.metadata_iv ?? null,
       metadata_tag: data.metadata_tag ?? null,
@@ -175,24 +121,6 @@ export async function createMessageWithSequence(
         encrypted_content: data.encrypted_content,
         content_iv: data.content_iv,
         content_tag: data.content_tag,
-        encrypted_input_tokens: data.encrypted_input_tokens ?? null,
-        input_tokens_iv: data.input_tokens_iv ?? null,
-        input_tokens_tag: data.input_tokens_tag ?? null,
-        encrypted_output_tokens: data.encrypted_output_tokens ?? null,
-        output_tokens_iv: data.output_tokens_iv ?? null,
-        output_tokens_tag: data.output_tokens_tag ?? null,
-        encrypted_thought_tokens: data.encrypted_thought_tokens ?? null,
-        thought_tokens_iv: data.thought_tokens_iv ?? null,
-        thought_tokens_tag: data.thought_tokens_tag ?? null,
-        encrypted_input_cost: data.encrypted_input_cost ?? null,
-        input_cost_iv: data.input_cost_iv ?? null,
-        input_cost_tag: data.input_cost_tag ?? null,
-        encrypted_output_cost: data.encrypted_output_cost ?? null,
-        output_cost_iv: data.output_cost_iv ?? null,
-        output_cost_tag: data.output_cost_tag ?? null,
-        encrypted_thought_cost: data.encrypted_thought_cost ?? null,
-        thought_cost_iv: data.thought_cost_iv ?? null,
-        thought_cost_tag: data.thought_cost_tag ?? null,
         encrypted_metadata: data.encrypted_metadata ?? null,
         metadata_iv: data.metadata_iv ?? null,
         metadata_tag: data.metadata_tag ?? null,

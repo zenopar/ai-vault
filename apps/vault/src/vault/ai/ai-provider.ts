@@ -11,6 +11,7 @@ export interface AiExecutionParams {
   provider?: string;
   model?: string;
   maxOutputTokens?: number;
+  thinkingLevel?: "low" | "medium" | "high" | "none";
 }
 
 export interface AiExecutionResult {
@@ -20,6 +21,7 @@ export interface AiExecutionResult {
   inputTokens?: number;
   outputTokens?: number;
   thoughtTokens?: number;
+  thinkingLevel?: string;
 }
 
 export class NoActiveApiKeyError extends Error {
@@ -73,13 +75,15 @@ export async function executeAiCompletion(params: AiExecutionParams): Promise<Ai
   const apiKey = await getDecryptedApiKey(selectedKeyRecord.id);
 
   let model = params.model;
-  let result: { text: string; inputTokens?: number; outputTokens?: number; thoughtTokens?: number };
+  let thinkingLevel = params.thinkingLevel ?? "none";
+  let result: { text: string; inputTokens?: number; outputTokens?: number; thoughtTokens?: number; thinkingLevel?: string };
 
   const mergedMessages = mergeSystemPrompt(params.messages);
 
   if (provider === "google") {
     model = model || "gemini-3.7-flash";
-    result = await callGemini(apiKey, model, mergedMessages, params.maxOutputTokens);
+    thinkingLevel = params.thinkingLevel ?? "medium"; // Google defaults to medium for reasoning models
+    result = await callGemini(apiKey, model, mergedMessages, params.maxOutputTokens, thinkingLevel);
   } else if (provider === "anthropic") {
     model = model || "claude-sonnet-5";
     result = await callAnthropic(apiKey, model, mergedMessages, params.maxOutputTokens);
@@ -103,6 +107,7 @@ export async function executeAiCompletion(params: AiExecutionParams): Promise<Ai
     inputTokens: result.inputTokens,
     outputTokens: result.outputTokens,
     thoughtTokens: result.thoughtTokens,
+    thinkingLevel: result.thinkingLevel || thinkingLevel,
   };
 }
 
@@ -110,8 +115,9 @@ async function callGemini(
   apiKey: string,
   model: string,
   messages: ChatMessagePrompt[],
-  maxOutputTokens: number = 2000
-): Promise<{ text: string; inputTokens?: number; outputTokens?: number; thoughtTokens?: number }> {
+  maxOutputTokens: number = 2000,
+  thinkingLevel: string = "medium"
+): Promise<{ text: string; inputTokens?: number; outputTokens?: number; thoughtTokens?: number; thinkingLevel?: string }> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
   const finalSystemInstructionText = messages.find((m) => m.role === "system")?.content || "";
@@ -137,9 +143,11 @@ async function callGemini(
       generationConfig: {
         maxOutputTokens,
         temperature: 0.4,
-        thinkingConfig: {
-          thinkingLevel: "medium"
-        }
+        ...(thinkingLevel !== "none" ? {
+          thinkingConfig: {
+            thinkingLevel: thinkingLevel
+          }
+        } : {})
       },
     }),
   });
@@ -171,6 +179,7 @@ async function callGemini(
     outputTokens: data.usageMetadata?.candidatesTokenCount,
     // Google Gemini currently lumps them in candidatesTokenCount, but we can look for future fields
     thoughtTokens: (data.usageMetadata as any)?.thoughtsTokenCount ?? (data.usageMetadata as any)?.thinkingTokenCount ?? (data.usageMetadata as any)?.reasoningTokenCount,
+    thinkingLevel,
   };
 }
 

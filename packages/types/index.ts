@@ -105,6 +105,9 @@ export interface ChatMessageDto {
   role: "user" | "assistant" | "system";
   content: string;
   sequenceNumber: number;
+  modelId?: string;
+  modelName?: string;
+  thinkingLevel?: string;
   inputTokens?: number;
   outputTokens?: number;
   thoughtTokens?: number;

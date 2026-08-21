@@ -161,90 +161,47 @@ export async function getChatMessages(
       console.warn(`[getChatMessages] Decryption failed for message (${msg.id}):`, e);
     }
 
+    let modelId: string | undefined = undefined;
+    let modelName: string | undefined = undefined;
+    let thinkingLevel: string | undefined = undefined;
     let inputTokens: number | undefined = undefined;
     let outputTokens: number | undefined = undefined;
     let thoughtTokens: number | undefined = undefined;
-
-    if ((msg as any).encrypted_input_tokens && (msg as any).input_tokens_iv && (msg as any).input_tokens_tag) {
-      try {
-        const inAad = buildFieldAad("message", msg.id, "input_tokens", msg.encryption_version);
-        const decIn = decryptBuffer({ ciphertext: (msg as any).encrypted_input_tokens, iv: (msg as any).input_tokens_iv, tag: (msg as any).input_tokens_tag }, dbKey, inAad);
-        const parsed = parseInt(decIn.toString("utf-8"), 10);
-        inputTokens = Number.isNaN(parsed) ? undefined : parsed;
-      } catch (e) {
-        console.warn(`[getChatMessages] Decryption failed for message input tokens (${msg.id}):`, e);
-      }
-    }
-
-    if ((msg as any).encrypted_output_tokens && (msg as any).output_tokens_iv && (msg as any).output_tokens_tag) {
-      try {
-        const outAad = buildFieldAad("message", msg.id, "output_tokens", msg.encryption_version);
-        const decOut = decryptBuffer({ ciphertext: (msg as any).encrypted_output_tokens, iv: (msg as any).output_tokens_iv, tag: (msg as any).output_tokens_tag }, dbKey, outAad);
-        const parsed = parseInt(decOut.toString("utf-8"), 10);
-        outputTokens = Number.isNaN(parsed) ? undefined : parsed;
-      } catch (e) {
-        console.warn(`[getChatMessages] Decryption failed for message output tokens (${msg.id}):`, e);
-      }
-    }
-
-    if ((msg as any).encrypted_thought_tokens && (msg as any).thought_tokens_iv && (msg as any).thought_tokens_tag) {
-      try {
-        const thoughtAad = buildFieldAad("message", msg.id, "thought_tokens", msg.encryption_version);
-        const decThought = decryptBuffer(
-          {
-            ciphertext: (msg as any).encrypted_thought_tokens,
-            iv: (msg as any).thought_tokens_iv,
-            tag: (msg as any).thought_tokens_tag,
-          },
-          dbKey,
-          thoughtAad
-        );
-        const parsedThought = parseInt(decThought.toString("utf-8"), 10);
-        thoughtTokens = Number.isNaN(parsedThought) ? thoughtTokens : parsedThought;
-      } catch (e) {
-        console.warn(`[getChatMessages] Decryption failed for message thought tokens (${msg.id}):`, e);
-      }
-    }
-
     let inputCost: number | undefined = undefined;
-    if ((msg as any).encrypted_input_cost && (msg as any).input_cost_iv && (msg as any).input_cost_tag) {
-      try {
-        const costAad = buildFieldAad("message", msg.id, "input_cost", msg.encryption_version);
-        const decCost = decryptBuffer({ ciphertext: (msg as any).encrypted_input_cost, iv: (msg as any).input_cost_iv, tag: (msg as any).input_cost_tag }, dbKey, costAad);
-        const parsedCost = parseFloat(decCost.toString("utf-8"));
-        inputCost = Number.isNaN(parsedCost) ? undefined : parsedCost;
-      } catch (e) {
-        console.warn(`[getChatMessages] Decryption failed for message input cost (${msg.id}):`, e);
-      }
-    }
-
     let outputCost: number | undefined = undefined;
-    if ((msg as any).encrypted_output_cost && (msg as any).output_cost_iv && (msg as any).output_cost_tag) {
-      try {
-        const costAad = buildFieldAad("message", msg.id, "output_cost", msg.encryption_version);
-        const decCost = decryptBuffer({ ciphertext: (msg as any).encrypted_output_cost, iv: (msg as any).output_cost_iv, tag: (msg as any).output_cost_tag }, dbKey, costAad);
-        const parsedCost = parseFloat(decCost.toString("utf-8"));
-        outputCost = Number.isNaN(parsedCost) ? undefined : parsedCost;
-      } catch (e) {
-        console.warn(`[getChatMessages] Decryption failed for message output cost (${msg.id}):`, e);
-      }
-    }
-
     let thoughtCost: number | undefined = undefined;
-    if ((msg as any).encrypted_thought_cost && (msg as any).thought_cost_iv && (msg as any).thought_cost_tag) {
-      try {
-        const costAad = buildFieldAad("message", msg.id, "thought_cost", msg.encryption_version);
-        const decCost = decryptBuffer({ ciphertext: (msg as any).encrypted_thought_cost, iv: (msg as any).thought_cost_iv, tag: (msg as any).thought_cost_tag }, dbKey, costAad);
-        const parsedCost = parseFloat(decCost.toString("utf-8"));
-        thoughtCost = Number.isNaN(parsedCost) ? undefined : parsedCost;
-      } catch (e) {
-        console.warn(`[getChatMessages] Decryption failed for message thought cost (${msg.id}):`, e);
-      }
-    }
-    
     let totalCost: number | undefined = undefined;
-    if (inputCost !== undefined || outputCost !== undefined) {
-      totalCost = (inputCost || 0) + (outputCost || 0);
+
+    if (msg.encrypted_metadata && msg.metadata_iv && msg.metadata_tag) {
+      try {
+        const metadataAad = buildFieldAad("message", msg.id, "metadata", msg.encryption_version);
+        const decMetadata = decryptBuffer({
+          ciphertext: msg.encrypted_metadata,
+          iv: msg.metadata_iv,
+          tag: msg.metadata_tag
+        }, dbKey, metadataAad);
+        const metadataStr = decMetadata.toString("utf-8");
+        const metadataObj = JSON.parse(metadataStr);
+
+        modelId = metadataObj.model_id ?? undefined;
+        modelName = metadataObj.model_name ?? undefined;
+        thinkingLevel = metadataObj.thinking_level ?? undefined;
+        
+        if (metadataObj.stats) {
+          inputTokens = metadataObj.stats.input_tokens || undefined;
+          outputTokens = metadataObj.stats.output_tokens || undefined;
+          thoughtTokens = metadataObj.stats.thought_tokens || undefined;
+          inputCost = metadataObj.stats.input_cost || undefined;
+          outputCost = metadataObj.stats.output_cost || undefined;
+          thoughtCost = metadataObj.stats.thought_cost || undefined;
+        }
+
+        if (inputCost !== undefined || outputCost !== undefined) {
+          totalCost = (inputCost || 0) + (outputCost || 0);
+        }
+      } catch (e) {
+        console.warn(`[getChatMessages] Decryption failed for message metadata (${msg.id}):`, e);
+      }
     }
 
     messages.push({
@@ -253,6 +210,9 @@ export async function getChatMessages(
       role: msg.role as "user" | "assistant" | "system",
       content,
       sequenceNumber: msg.sequence_number,
+      modelId,
+      modelName,
+      thinkingLevel,
       inputTokens,
       outputTokens,
       thoughtTokens,

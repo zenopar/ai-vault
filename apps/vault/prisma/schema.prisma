@@ -102,42 +102,24 @@ model chats {
 }
 
 model messages {
-  id                       String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  chat_id                  String     @db.Uuid
-  parent_message_id        String?    @db.Uuid
-  sequence_number          Int        @default(1)
-  role                     String     @db.VarChar(32)
-  encryption_version       Int        @default(1)
-  status                   String     @default("ACTIVE") @db.VarChar(32)
-  encrypted_content        String
-  content_iv               String     @db.VarChar(32)
-  content_tag              String     @db.VarChar(32)
-  encrypted_input_tokens   String?
-  input_tokens_iv          String?    @db.VarChar(32)
-  input_tokens_tag         String?    @db.VarChar(32)
-  encrypted_output_tokens  String?
-  output_tokens_iv         String?    @db.VarChar(32)
-  output_tokens_tag        String?    @db.VarChar(32)
-  encrypted_thought_tokens String?
-  thought_tokens_iv        String?    @db.VarChar(32)
-  thought_tokens_tag       String?    @db.VarChar(32)
-  encrypted_input_cost     String?
-  input_cost_iv            String?    @db.VarChar(32)
-  input_cost_tag           String?    @db.VarChar(32)
-  encrypted_output_cost    String?
-  output_cost_iv           String?    @db.VarChar(32)
-  output_cost_tag          String?    @db.VarChar(32)
-  encrypted_thought_cost   String?
-  thought_cost_iv          String?    @db.VarChar(32)
-  thought_cost_tag         String?    @db.VarChar(32)
-  encrypted_metadata       String?
-  metadata_iv              String?    @db.VarChar(32)
-  metadata_tag             String?    @db.VarChar(32)
-  created_at               DateTime   @default(now()) @db.Timestamptz(6)
-  updated_at               DateTime   @default(now()) @db.Timestamptz(6)
-  chats                    chats      @relation(fields: [chat_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  messages                 messages?  @relation("messagesTomessages", fields: [parent_message_id], references: [id], onUpdate: NoAction)
-  other_messages           messages[] @relation("messagesTomessages")
+  id                 String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  chat_id            String     @db.Uuid
+  parent_message_id  String?    @db.Uuid
+  sequence_number    Int        @default(1)
+  role               String     @db.VarChar(32)
+  encryption_version Int        @default(1)
+  status             String     @default("ACTIVE") @db.VarChar(32)
+  encrypted_content  String
+  content_iv         String     @db.VarChar(32)
+  content_tag        String     @db.VarChar(32)
+  encrypted_metadata String?
+  metadata_iv        String?    @db.VarChar(32)
+  metadata_tag       String?    @db.VarChar(32)
+  created_at         DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime   @default(now()) @db.Timestamptz(6)
+  chats              chats      @relation(fields: [chat_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  messages           messages?  @relation("messagesTomessages", fields: [parent_message_id], references: [id], onUpdate: NoAction)
+  other_messages     messages[] @relation("messagesTomessages")
 
   @@index([chat_id], map: "idx_messages_chat_id")
   @@index([chat_id, sequence_number], map: "idx_messages_chat_sequence")

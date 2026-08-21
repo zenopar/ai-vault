@@ -35,7 +35,7 @@ const activeChatLocks = new Set<string>();
 
 // === 4. AI EXECUTION PIPELINE ===
 
-async function calculateDynamicTokens(provider: string, model: string): Promise<{ maxTokens: number; maxOutputTokens?: number; inputPrice?: number; outputPrice?: number }> {
+async function calculateDynamicTokens(provider: string, model: string): Promise<{ maxTokens: number; maxOutputTokens?: number; inputPrice?: number; outputPrice?: number; modelId?: string }> {
   let maxTokens = 6000;
   let maxOutputTokens: number | undefined = undefined;
   let inputPrice: number | undefined = undefined;
@@ -72,6 +72,7 @@ async function calculateDynamicTokens(provider: string, model: string): Promise<
       maxTokens = Math.min(maxTokens, contextLimit);
       inputPrice = inputCost !== null ? inputCost : undefined;
       outputPrice = outputCost !== null ? outputCost : undefined;
+      return { maxTokens, maxOutputTokens, inputPrice, outputPrice, modelId: dbModel.id };
     }
   } catch (e) {
     console.warn("Failed to determine dynamic maxTokens from model cost, using default fallback:", e);
@@ -151,7 +152,7 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
     const activeProvider = params.provider || chat.metadata?.provider || "google";
     const activeModel = params.model || chat.metadata?.model || "gemini-3.7-flash";
 
-    const { maxTokens, maxOutputTokens, inputPrice, outputPrice } = await calculateDynamicTokens(activeProvider, activeModel);
+    const { maxTokens, maxOutputTokens, inputPrice, outputPrice, modelId } = await calculateDynamicTokens(activeProvider, activeModel);
     
     // 1. Build context
     const existingMessages = await getChatMessages(chat.id, 100, 0, "desc");
@@ -178,6 +179,7 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
       role: "user",
       content: trimmedMessage,
       sequenceNumber: userRecord.sequence_number,
+      modelName: activeModel,
       createdAt: userRecord.created_at.toISOString(),
       updatedAt: userRecord.updated_at.toISOString(),
     };
@@ -195,38 +197,15 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
     const assistantAad = buildFieldAad("message", assistantMsgId, "content", 1);
     const encAssistantContent = encryptBuffer(Buffer.from(aiResult.content, "utf-8"), dbKey, assistantAad);
 
-    let encInTokensCipher: string | null = null;
-    let inTokensIv: string | null = null;
-    let inTokensTag: string | null = null;
-
-    let encOutTokensCipher: string | null = null;
-    let outTokensIv: string | null = null;
-    let outTokensTag: string | null = null;
-
-    let encInCostCipher: string | null = null;
-    let inCostIv: string | null = null;
-    let inCostTag: string | null = null;
-
-    let encOutCostCipher: string | null = null;
-    let outCostIv: string | null = null;
-    let outCostTag: string | null = null;
-
-    let encThoughtCostCipher: string | null = null;
-    let thoughtCostIv: string | null = null;
-    let thoughtCostTag: string | null = null;
-
     let messageInputCost: number | undefined = undefined;
     let messageOutputCost: number | undefined = undefined;
     let messageThoughtCost: number | undefined = undefined;
     let messageTotalCost: number | undefined = undefined;
 
-    let encThoughtCipher: string | null = null;
-    let thoughtIv: string | null = null;
-    let thoughtTag: string | null = null;
-
+    let inT = 0, outT = 0;
     if (aiResult.inputTokens !== undefined || aiResult.outputTokens !== undefined) {
-      const inT = aiResult.inputTokens ?? 0;
-      const outT = aiResult.outputTokens ?? 0;
+      inT = aiResult.inputTokens ?? 0;
+      outT = aiResult.outputTokens ?? 0;
       
       if (inputPrice !== undefined || outputPrice !== undefined) {
         const inP = inputPrice ?? 0;
@@ -234,41 +213,6 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
         messageInputCost = (inT / 1000000 * inP);
         messageOutputCost = (outT / 1000000 * outP);
         messageTotalCost = messageInputCost + messageOutputCost;
-
-        const inCostAad = buildFieldAad("message", assistantMsgId, "input_cost", 1);
-        const encInCost = encryptBuffer(Buffer.from(messageInputCost.toString(), "utf-8"), dbKey, inCostAad);
-        encInCostCipher = encInCost.ciphertext;
-        inCostIv = encInCost.iv;
-        inCostTag = encInCost.tag;
-
-        const outCostAad = buildFieldAad("message", assistantMsgId, "output_cost", 1);
-        const encOutCost = encryptBuffer(Buffer.from(messageOutputCost.toString(), "utf-8"), dbKey, outCostAad);
-        encOutCostCipher = encOutCost.ciphertext;
-        outCostIv = encOutCost.iv;
-        outCostTag = encOutCost.tag;
-      }
-
-      const inTokensAad = buildFieldAad("message", assistantMsgId, "input_tokens", 1);
-      const encInTokens = encryptBuffer(Buffer.from(inT.toString(), "utf-8"), dbKey, inTokensAad);
-      encInTokensCipher = encInTokens.ciphertext;
-      inTokensIv = encInTokens.iv;
-      inTokensTag = encInTokens.tag;
-
-      const outTokensAad = buildFieldAad("message", assistantMsgId, "output_tokens", 1);
-      const encOutTokens = encryptBuffer(Buffer.from(outT.toString(), "utf-8"), dbKey, outTokensAad);
-      encOutTokensCipher = encOutTokens.ciphertext;
-      outTokensIv = encOutTokens.iv;
-      outTokensTag = encOutTokens.tag;
-
-      if (aiResult.thoughtTokens !== undefined) {
-        const thoughtAad = buildFieldAad("message", assistantMsgId, "thought_tokens", 1);
-        const encThought = encryptBuffer(Buffer.from(aiResult.thoughtTokens.toString(), "utf-8"), dbKey, thoughtAad);
-        encThoughtCipher = encThought.ciphertext;
-        thoughtIv = encThought.iv;
-        thoughtTag = encThought.tag;
-        
-        // If we want to calculate thought cost, assuming thought tokens are part of output tokens usually, but we could separate it if there's a specific price. 
-        // For now, only calculate if there's a specific thought price, or we can just leave it undefined since we don't have it in `calculateDynamicTokens`.
       }
 
       // Update Chat Tokens and Cost
@@ -277,8 +221,8 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
         const fields = decryptChatFields(chatRecord, dbKey);
         const chatInputTokens = (fields.inputTokens || 0) + inT;
         const chatOutputTokens = (fields.outputTokens || 0) + outT;
-        const chatInputCost = (fields.inputCost || 0) + (inT / 1000000 * (inputPrice ?? 0));
-        const chatOutputCost = (fields.outputCost || 0) + (outT / 1000000 * (outputPrice ?? 0));
+        const chatInputCost = (fields.inputCost || 0) + (messageInputCost ?? 0);
+        const chatOutputCost = (fields.outputCost || 0) + (messageOutputCost ?? 0);
         const chatTotalCost = chatInputCost + chatOutputCost;
         const chatThoughtTokens = (fields.thoughtTokens || 0) + (aiResult.thoughtTokens || 0);
 
@@ -343,6 +287,24 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
       }
     }
 
+    const metadataObj = {
+      model_id: modelId ?? null,
+      model_name: aiResult.model,
+      thinking_level: aiResult.thinkingLevel || null,
+      stats: {
+        input_tokens: aiResult.inputTokens ?? 0,
+        output_tokens: aiResult.outputTokens ?? 0,
+        thought_tokens: aiResult.thoughtTokens ?? 0,
+        input_cost: messageInputCost ?? 0,
+        output_cost: messageOutputCost ?? 0,
+        thought_cost: messageThoughtCost ?? 0
+      },
+      tool_calls: []
+    };
+
+    const metadataAad = buildFieldAad("message", assistantMsgId, "metadata", 1);
+    const encMetadata = encryptBuffer(Buffer.from(JSON.stringify(metadataObj), "utf-8"), dbKey, metadataAad);
+
     const assistantRecord = await createMessageRecord({
       id: assistantMsgId,
       chat_id: chat.id,
@@ -352,24 +314,9 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
       encrypted_content: encAssistantContent.ciphertext,
       content_iv: encAssistantContent.iv,
       content_tag: encAssistantContent.tag,
-      encrypted_input_tokens: encInTokensCipher,
-      input_tokens_iv: inTokensIv,
-      input_tokens_tag: inTokensTag,
-      encrypted_output_tokens: encOutTokensCipher,
-      output_tokens_iv: outTokensIv,
-      output_tokens_tag: outTokensTag,
-      encrypted_thought_tokens: encThoughtCipher,
-      thought_tokens_iv: thoughtIv,
-      thought_tokens_tag: thoughtTag,
-      encrypted_input_cost: encInCostCipher,
-      input_cost_iv: inCostIv,
-      input_cost_tag: inCostTag,
-      encrypted_output_cost: encOutCostCipher,
-      output_cost_iv: outCostIv,
-      output_cost_tag: outCostTag,
-      encrypted_thought_cost: encThoughtCostCipher,
-      thought_cost_iv: thoughtCostIv,
-      thought_cost_tag: thoughtCostTag,
+      encrypted_metadata: encMetadata.ciphertext,
+      metadata_iv: encMetadata.iv,
+      metadata_tag: encMetadata.tag,
     });
 
     const assistantMessageDto: ChatMessageDto = {
@@ -378,6 +325,8 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
       role: "assistant",
       content: aiResult.content,
       sequenceNumber: assistantRecord.sequence_number,
+      modelName: aiResult.model,
+      thinkingLevel: aiResult.thinkingLevel || undefined,
       inputTokens: aiResult.inputTokens,
       outputTokens: aiResult.outputTokens,
       thoughtTokens: aiResult.thoughtTokens,
