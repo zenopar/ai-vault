@@ -104,6 +104,12 @@ CREATE TABLE IF NOT EXISTS "vault"."chats" (
     "output_tokens_iv" VARCHAR(32),
     "output_tokens_tag" VARCHAR(32),
 
+    -- Encrypted Aggregate Thought Tokens (AES-256-GCM via DB Key)
+    -- AAD format: type:chat|id:<chat_id>|field:thought_tokens|v:<encryption_version>
+    "encrypted_thought_tokens" TEXT,
+    "thought_tokens_iv" VARCHAR(32),
+    "thought_tokens_tag" VARCHAR(32),
+
     -- Encrypted Aggregate Input Cost (AES-256-GCM via DB Key)
     -- AAD format: type:chat|id:<chat_id>|field:input_cost|v:<encryption_version>
     "encrypted_input_cost" TEXT,
@@ -154,6 +160,12 @@ CREATE TABLE IF NOT EXISTS "vault"."messages" (
     "encrypted_tokens" TEXT,
     "tokens_iv" VARCHAR(32),
     "tokens_tag" VARCHAR(32),
+
+    -- Encrypted Thought Tokens (AES-256-GCM via DB Key)
+    -- AAD format: type:chat_message|id:<message_id>|field:thought_tokens|v:<encryption_version>
+    "encrypted_thought_tokens" TEXT,
+    "thought_tokens_iv" VARCHAR(32),
+    "thought_tokens_tag" VARCHAR(32),
 
     -- Encrypted Message Cost (AES-256-GCM via DB Key)
     -- AAD format: type:chat_message|id:<message_id>|field:cost|v:<encryption_version>
