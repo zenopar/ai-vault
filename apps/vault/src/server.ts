@@ -66,6 +66,7 @@ function readJsonBody<T = any>(req: IncomingMessage): Promise<T> {
 }
 
 const ALLOWED_ORIGIN_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function resolveAllowedOrigin(req: IncomingMessage): string {
   const origin = req.headers["origin"];
@@ -254,8 +255,8 @@ export function createVaultHttpServer() {
           return;
         }
 
-        if (!id) {
-          sendJson(res, 400, { error: "Key ID is required in URL path (/keys/:id)." });
+        if (!id || !UUID_REGEX.test(id)) {
+          sendJson(res, 400, { error: "A valid Key ID (UUID) is required in URL path (/keys/:id)." });
           return;
         }
 
@@ -366,8 +367,8 @@ export function createVaultHttpServer() {
         }
 
         const chatId = pathname.replace(/^\/chats\//, "").replace(/\/messages$/, "").trim();
-        if (!chatId) {
-          sendJson(res, 400, { error: "Chat ID is required." });
+        if (!chatId || !UUID_REGEX.test(chatId)) {
+          sendJson(res, 400, { error: "A valid Chat ID (UUID) is required." });
           return;
         }
 
@@ -399,8 +400,8 @@ export function createVaultHttpServer() {
         }
 
         const chatId = pathname.replace(/^\/chats\//, "").trim();
-        if (!chatId) {
-          sendJson(res, 400, { error: "Chat ID is required." });
+        if (!chatId || !UUID_REGEX.test(chatId)) {
+          sendJson(res, 400, { error: "A valid Chat ID (UUID) is required." });
           return;
         }
 
