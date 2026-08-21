@@ -13,7 +13,6 @@ import {
 } from "./vault/keys.js";
 import { listModels } from "./vault/models.js";
 import {
-  createChat,
   listChats,
   getChat,
   getChatMessages,
@@ -30,7 +29,6 @@ import {
   AddApiKeyResponse,
   ListApiKeysResponse,
   ListModelsResponse,
-  CreateChatResponse,
   ListChatsResponse,
   SendChatMessageResponse,
   GetChatMessagesResponse

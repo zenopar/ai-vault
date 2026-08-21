@@ -81,17 +81,7 @@ export interface ChatMetadata {
   updatedAt: string;
 }
 
-export interface CreateChatRequest {
-  title?: string;
-  metadata?: Record<string, any>;
-  sessionToken?: string;
-}
 
-export interface CreateChatResponse {
-  success: boolean;
-  chat?: ChatMetadata;
-  error?: string;
-}
 
 export interface ListChatsResponse {
   success: boolean;
