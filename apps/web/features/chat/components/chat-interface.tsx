@@ -364,11 +364,21 @@ export function ChatInterface({ initialChats, initialKeys }: ChatInterfaceProps)
                 >
                   <div className="flex items-center justify-between gap-2 mb-1.5">
                     <div
-                      className={`text-xs font-semibold ${
-                        m.role === "user" ? "text-gray-300" : "text-gray-600"
+                      className={`flex items-center text-xs font-semibold ${
+                        m.role === "user" ? "text-gray-400" : "text-gray-600"
                       }`}
                     >
                       {m.role === "user" ? "You" : "AI"}
+                      {m.role !== "user" && m.modelName && (
+                        <span className="ml-2 px-1.5 py-0.5 bg-gray-100 border border-gray-200 text-gray-500 rounded font-mono text-[9px] uppercase tracking-wider">
+                          {m.modelName}
+                        </span>
+                      )}
+                      {m.role !== "user" && m.thinkingLevel && m.thinkingLevel !== "none" && (
+                        <span className="ml-1 px-1.5 py-0.5 bg-purple-50 border border-purple-100 text-purple-600 rounded font-mono text-[9px] uppercase tracking-wider flex items-center gap-1">
+                          🧠 {m.thinkingLevel}
+                        </span>
+                      )}
                     </div>
 
                     {(m.inputTokens !== undefined || m.outputTokens !== undefined || m.totalCost !== undefined || (m as any).cost !== undefined) && (
