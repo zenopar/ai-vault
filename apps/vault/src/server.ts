@@ -278,30 +278,7 @@ export function createVaultHttpServer() {
         return;
       }
 
-      // 12. Create a new chat
-      if (method === "POST" && pathname === "/chats") {
-        const body = await readJsonBody<{ title?: string; metadata?: Record<string, any> }>(req);
-
-        if (!authenticateSessionToken(req)) {
-          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
-          return;
-        }
-
-        if (body.title !== undefined && typeof body.title !== "string") {
-          sendJson(res, 400, { error: "title must be a string if provided." });
-          return;
-        }
-
-        const chat = await createChat({
-          title: body.title,
-          metadata: body.metadata,
-        });
-
-        sendJson<CreateChatResponse>(res, 201, { success: true, chat });
-        return;
-      }
-
-      // 13. List all chats
+      // 12. List all chats
       if (method === "GET" && pathname === "/chats") {
         if (!authenticateSessionToken(req)) {
           sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
@@ -310,7 +287,7 @@ export function createVaultHttpServer() {
 
         const limitParam = url.searchParams.get("limit");
         const offsetParam = url.searchParams.get("offset");
-        
+
         const limit = limitParam ? Math.min(parseInt(limitParam, 10), 100) : 50;
         const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
 
@@ -324,7 +301,7 @@ export function createVaultHttpServer() {
         return;
       }
 
-      // 14. Send message (with AI completion & automatic encryption)
+      // 13. Send message (with AI completion & automatic encryption)
       if (method === "POST" && pathname === "/chats/messages") {
         const body = await readJsonBody<{
           chatId?: string;
@@ -359,7 +336,7 @@ export function createVaultHttpServer() {
         return;
       }
 
-      // 15. Get chat messages
+      // 14. Get chat messages
       if (method === "GET" && pathname.startsWith("/chats/") && pathname.endsWith("/messages")) {
         if (!authenticateSessionToken(req)) {
           sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
@@ -375,7 +352,7 @@ export function createVaultHttpServer() {
         const limitParam = url.searchParams.get("limit");
         const offsetParam = url.searchParams.get("offset");
         const sortParam = url.searchParams.get("sort");
-        
+
         const limit = limitParam ? Math.min(parseInt(limitParam, 10), 100) : 50;
         const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
 
@@ -392,7 +369,7 @@ export function createVaultHttpServer() {
         return;
       }
 
-      // 16. Delete a chat
+      // 15. Delete a chat
       if (method === "DELETE" && pathname.startsWith("/chats/")) {
         if (!authenticateSessionToken(req)) {
           sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
