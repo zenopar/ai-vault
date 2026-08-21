@@ -8,7 +8,8 @@ import {
   encryptBuffer,
   DEFAULT_KDF_PARAMS,
   AAD_WRAPPED_VAULT_KEY_MASTER,
-  AAD_WRAPPED_VAULT_KEY_RECOVERY
+  AAD_WRAPPED_VAULT_KEY_RECOVERY,
+  EncryptedData
 } from "./crypto.js";
 import { vaultState } from "./state.js";
 import { VaultInitResponse } from "@ai-vault/types";
@@ -39,13 +40,23 @@ export async function initVault(masterPassword: string): Promise<VaultInitRespon
   // Generate Recovery Password for the user
   const recoveryPassword = generateRecoveryPassword();
 
-  // Derive Wrapping Keys using Argon2
-  const wrappingKey = await deriveKey(masterPassword, kdfSalt, DEFAULT_KDF_PARAMS);
-  const recoveryWrappingKey = await deriveKey(recoveryPassword, recoverySalt, DEFAULT_KDF_PARAMS);
+  let wrappingKey: Buffer | null = null;
+  let recoveryWrappingKey: Buffer | null = null;
+  let wrappedVaultKey: EncryptedData;
+  let wrappedRecoveryKey: EncryptedData;
 
-  // Encrypt the Vault Key with explicit domain-separated AAD
-  const wrappedVaultKey = encryptBuffer(vaultKey, wrappingKey, AAD_WRAPPED_VAULT_KEY_MASTER);
-  const wrappedRecoveryKey = encryptBuffer(vaultKey, recoveryWrappingKey, AAD_WRAPPED_VAULT_KEY_RECOVERY);
+  try {
+    // Derive Wrapping Keys using Argon2
+    wrappingKey = await deriveKey(masterPassword, kdfSalt, DEFAULT_KDF_PARAMS);
+    recoveryWrappingKey = await deriveKey(recoveryPassword, recoverySalt, DEFAULT_KDF_PARAMS);
+
+    // Encrypt the Vault Key with explicit domain-separated AAD
+    wrappedVaultKey = encryptBuffer(vaultKey, wrappingKey, AAD_WRAPPED_VAULT_KEY_MASTER);
+    wrappedRecoveryKey = encryptBuffer(vaultKey, recoveryWrappingKey, AAD_WRAPPED_VAULT_KEY_RECOVERY);
+  } finally {
+    wrappingKey?.fill(0);
+    recoveryWrappingKey?.fill(0);
+  }
 
   // Save everything to DB
   await createVaultConfig({

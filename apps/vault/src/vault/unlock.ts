@@ -35,8 +35,9 @@ export async function unlockVault(password: string): Promise<VaultUnlockResponse
   let vaultKey: Buffer | null = null;
 
   // 1. Try master password
+  let wrappingKey: Buffer | null = null;
   try {
-    const wrappingKey = await deriveKey(password, dbConfig.kdf_salt, {
+    wrappingKey = await deriveKey(password, dbConfig.kdf_salt, {
       memoryCost: dbConfig.kdf_memory_cost,
       timeCost: dbConfig.kdf_time_cost,
       parallelism: dbConfig.kdf_parallelism,
@@ -54,12 +55,15 @@ export async function unlockVault(password: string): Promise<VaultUnlockResponse
     );
   } catch (e) {
     // Master password decryption failed, fall through to recovery code
+  } finally {
+    wrappingKey?.fill(0);
   }
 
   // 2. If master password fails, try recovery code
   if (!vaultKey) {
+    let recoveryWrappingKey: Buffer | null = null;
     try {
-      const recoveryWrappingKey = await deriveKey(password, dbConfig.recovery_kdf_salt, {
+      recoveryWrappingKey = await deriveKey(password, dbConfig.recovery_kdf_salt, {
         memoryCost: dbConfig.kdf_memory_cost,
         timeCost: dbConfig.kdf_time_cost,
         parallelism: dbConfig.kdf_parallelism,
@@ -77,6 +81,8 @@ export async function unlockVault(password: string): Promise<VaultUnlockResponse
       );
     } catch (e) {
       // Recovery password decryption failed
+    } finally {
+      recoveryWrappingKey?.fill(0);
     }
   }
 
