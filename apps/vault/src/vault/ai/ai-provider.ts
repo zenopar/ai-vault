@@ -94,7 +94,7 @@ async function callGemini(
   messages: ChatMessagePrompt[],
   maxOutputTokens: number = 2000
 ): Promise<{ text: string; inputTokens?: number; outputTokens?: number }> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
   const existingSystemMsg = messages.find((m) => m.role === "system")?.content || "";
   const addedSystemMsg = "Be a friendly but 100% honest assistant. Truth is paramount regardless of emotions. Keep responses as concise as possible while remaining fully meaningful.";
@@ -112,7 +112,10 @@ async function callGemini(
 
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey,
+    },
     body: JSON.stringify({
       systemInstruction: {
         parts: [{ text: finalSystemInstructionText }]
