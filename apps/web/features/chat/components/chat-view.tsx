@@ -217,7 +217,7 @@ export function ChatView({
         keys={keys}
       />
 
-      <main className="flex-1 flex flex-col h-full overflow-hidden transition-[padding] duration-200 md:pl-60">
+      <main className="flex-1 flex flex-col h-full overflow-hidden transition-[padding] duration-200 md:pl-56">
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 sm:px-8 md:px-12 py-8">
