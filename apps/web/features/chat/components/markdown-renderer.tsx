@@ -3,6 +3,8 @@
 import React, { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 import { Button } from "@/shared/components";
 
 interface MarkdownRendererProps {
@@ -51,7 +53,8 @@ function CodeBlock({
 export const MarkdownRenderer = React.memo(function MarkdownRenderer({ content }: MarkdownRendererProps) {
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeKatex]}
       components={{
         code({ className, children, ...props }) {
           const match = /language-(\w+)/.exec(className || "");
