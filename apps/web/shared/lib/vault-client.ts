@@ -83,6 +83,32 @@ export class VaultApiClient {
     }
   }
 
+  static async sendPutRequest<T, B = Record<string, unknown>>(
+    path: string, 
+    body: B, 
+    options?: VaultRequestOptions
+  ): Promise<VaultResponse<T>> {
+    try {
+      const response = await fetch(`${this.vaultUrl}${path}`, {
+        method: "PUT",
+        headers: this.buildHeaders(options),
+        body: JSON.stringify(body),
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Vault error ${response.status}: ${errorText}`);
+      }
+
+      const data = (await response.json()) as T;
+      return { data };
+    } catch (error) {
+      console.error(`PUT request failed to ${path}:`, error);
+      return { error: "Vault connection error", errorDetails: error instanceof Error ? error.message : "Unknown error" };
+    }
+  }
+
   static async sendDeleteRequest<T>(path: string, options?: VaultRequestOptions): Promise<VaultResponse<T>> {
     try {
       const response = await fetch(`${this.vaultUrl}${path}`, {
