@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { checkRateLimit } from "@/shared/lib/rate-limit";
 import { getClientIp } from "@/shared/lib/get-ip";
 import { initVaultService } from "../services/init-vault.service";

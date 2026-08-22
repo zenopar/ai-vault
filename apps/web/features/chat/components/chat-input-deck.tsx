@@ -193,7 +193,7 @@ export function ChatInputDeck({
                     { value: "high", label: "think: high" },
                   ]}
                   value={thinkingLevel}
-                  onChange={(val) => setThinkingLevel(val as any)}
+                  onChange={(val) => setThinkingLevel(val as "none" | "low" | "medium" | "high")}
                   direction="up"
                 />
               </div>

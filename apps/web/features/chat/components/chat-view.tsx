@@ -60,7 +60,6 @@ export function ChatView({
   const [isPending, startTransition] = useTransition();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const activeChat = chats.find((c) => c.id === activeChatId) || null;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -156,12 +155,6 @@ export function ChatView({
   const totalOutputTokens = messages.reduce((acc, m) => acc + (m.outputTokens || 0), 0);
   const totalThoughtTokens = messages.reduce((acc, m) => acc + (m.thoughtTokens || 0), 0);
   const totalCost = messages.reduce((acc, m) => acc + (m.totalCost || 0), 0);
-
-  const formatTotalCost = (cost: number) => {
-    if (cost === 0) return "$0.00";
-    if (cost < 0.01) return `$${cost.toFixed(4)}`;
-    return `$${cost.toFixed(3)}`;
-  };
 
   return (
     <AutoLockGuard>

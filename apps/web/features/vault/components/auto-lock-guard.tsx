@@ -8,10 +8,11 @@ const INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour
 
 export function AutoLockGuard({ children }: { children?: React.ReactNode }) {
   const router = useRouter();
-  const lastActivityRef = useRef<number>(Date.now());
+  const lastActivityRef = useRef<number>(0);
   const isLockingRef = useRef<boolean>(false);
 
   useEffect(() => {
+    lastActivityRef.current = Date.now();
     const triggerLock = async () => {
       if (isLockingRef.current) return;
       isLockingRef.current = true;
