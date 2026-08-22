@@ -90,7 +90,7 @@ class VaultStateManager {
    * 
    * Note: The caller must immediately overwrite/zeroize their plaintext vaultKey buffer.
    */
-  public createSession(vaultKey: Buffer, options?: { expiresInMs?: number }): string {
+  public createSession(vaultKey: Buffer, options?: { expiresInMs?: number; wipeSourceKey?: boolean }): string {
     if (!vaultKey || vaultKey.length !== 32) {
       throw new Error("Invalid vault key length for session encryption.");
     }
@@ -111,6 +111,10 @@ class VaultStateManager {
     } finally {
       // Overwrite temporary wrapping key
       sessionWrappingKey.fill(0);
+      // Defense-in-depth: wipe source vaultKey buffer directly if requested (default true)
+      if (options?.wipeSourceKey !== false) {
+        vaultKey.fill(0);
+      }
     }
 
     this.state.sessions.set(tokenHash, {
