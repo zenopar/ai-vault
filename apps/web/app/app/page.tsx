@@ -1,39 +1,69 @@
 import { redirect } from "next/navigation";
 import { verifySession } from "@/shared/lib/session";
 import { getVaultStatus } from "@/features/vault/services/vault-status.service";
-import { listChatsService } from "@/features/chat/services/chat.service";
+import { listChatsService, getChatMessagesService } from "@/features/chat/services/chat.service";
 import { listApiKeysService } from "@/features/keys/services/keys.service";
-import { ChatInterface } from "@/features/chat/components/chat-interface";
-import { ChatMetadata, AiApiKeyMetadata } from "@ai-vault/types";
+import { listModelsService } from "@/features/chat/services/models.service";
+import { ChatView } from "@/features/chat/components/chat-view";
+import { ChatMetadata, ChatMessageDto, AiApiKeyMetadata, AiModelMetadata } from "@ai-vault/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function AppDashboard() {
-  const isValidSession = await verifySession();
+interface AppPageProps {
+  searchParams: Promise<{ c?: string }>;
+}
 
+export default async function AppPage({ searchParams }: AppPageProps) {
+  const isValidSession = await verifySession();
   if (!isValidSession) {
     redirect("/");
   }
 
   const status = await getVaultStatus();
-
   if (status.status !== "UNLOCKED") {
     redirect("/");
   }
 
+  const resolvedSearchParams = await searchParams;
+  const targetChatId = resolvedSearchParams?.c || null;
+
   let chats: ChatMetadata[] = [];
   let keys: AiApiKeyMetadata[] = [];
+  let models: AiModelMetadata[] = [];
+  let initialMessages: ChatMessageDto[] = [];
 
   try {
-    const [fetchedChats, fetchedKeys] = await Promise.all([
-      listChatsService().catch(() => []),
-      listApiKeysService().catch(() => []),
+    const [chatsRes, keysRes, modelsRes] = await Promise.allSettled([
+      listChatsService(),
+      listApiKeysService(),
+      listModelsService(),
     ]);
-    chats = fetchedChats;
-    keys = fetchedKeys;
-  } catch (error) {
-    console.error("[AppDashboard] Failed to fetch initial data:", error);
+
+    if (chatsRes.status === "fulfilled") {
+      chats = chatsRes.value;
+    }
+    if (keysRes.status === "fulfilled") {
+      keys = keysRes.value;
+    }
+    if (modelsRes.status === "fulfilled") {
+      models = modelsRes.value;
+    }
+
+    if (targetChatId) {
+      const messagesRes = await getChatMessagesService(targetChatId);
+      initialMessages = messagesRes.messages || [];
+    }
+  } catch (err) {
+    console.error("[AppPage] Error fetching initial data:", err);
   }
 
-  return <ChatInterface initialChats={chats} initialKeys={keys} />;
+  return (
+    <ChatView
+      initialChats={chats}
+      initialKeys={keys}
+      initialModels={models}
+      initialChatId={targetChatId}
+      initialMessages={initialMessages}
+    />
+  );
 }
