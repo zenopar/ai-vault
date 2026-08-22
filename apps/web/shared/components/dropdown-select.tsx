@@ -100,17 +100,17 @@ export function DropdownSelect({
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen((prev) => !prev)}
-        className={cn(dropdownTriggerVariants({ variant, className }))}
+        className={cn(dropdownTriggerVariants({ variant, className }), "max-w-full text-[10.5px] sm:text-xs px-2 sm:px-2.5 py-1")}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
-        <span className="truncate max-w-[200px]">
+        <span className="truncate max-w-[90px] xs:max-w-[130px] sm:max-w-[200px]">
           {selectedOption ? selectedOption.label : placeholder}
         </span>
         <svg
           className={cn(
             "w-3 h-3 text-neutral-400 transition-transform duration-150 shrink-0",
-            isOpen && (direction === "up" ? "rotate-180" : "rotate-180")
+            isOpen && "rotate-180"
           )}
           fill="none"
           stroke="currentColor"

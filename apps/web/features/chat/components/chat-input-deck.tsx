@@ -123,7 +123,7 @@ export function ChatInputDeck({
   };
 
   return (
-    <div className="w-full shrink-0 px-4 sm:px-8 md:px-12 pb-6 pt-2">
+    <div className="w-full shrink-0 px-3 sm:px-8 md:px-12 pb-4 sm:pb-6 pt-2">
       <div className="max-w-4xl mx-auto relative">
         {/* Thinking glowing aura */}
         {disabled && (
@@ -150,42 +150,61 @@ export function ChatInputDeck({
             placeholder="Send a message..."
             rows={1}
             autoComplete="off"
-            className="chat-textarea w-full bg-transparent text-[15px] text-neutral-100 placeholder:text-neutral-500/70 resize-none focus:outline-none leading-[1.65] py-3.5 px-4.5 font-sans antialiased max-h-[220px] overflow-y-auto block caret-indigo-400 selection:bg-indigo-500/25 selection:text-white"
+            className="chat-textarea w-full bg-transparent text-[14.5px] sm:text-[15px] text-neutral-100 placeholder:text-neutral-500/70 resize-none focus:outline-none leading-[1.6] py-3 px-3.5 sm:py-3.5 sm:px-4.5 font-sans antialiased max-h-[200px] overflow-y-auto block caret-indigo-400 selection:bg-indigo-500/25 selection:text-white"
             style={{
-              minHeight: "52px",
+              minHeight: "48px",
               fieldSizing: "content",
             }}
           />
 
-          {/* Bottom bar: selectors + send */}
-          <div className="px-4 pb-3 pt-1 flex flex-wrap items-center justify-between gap-2.5 font-mono text-[11px] text-neutral-400 border-t border-white/[0.03]">
-            <div className="flex flex-wrap items-center gap-2">
+          {/* Bottom bar: selectors + send button */}
+          <div className="px-3 sm:px-4 pb-2.5 sm:pb-3 pt-1.5 flex items-center justify-between gap-2 font-mono text-[11px] text-neutral-400 border-t border-white/[0.03]">
+            {/* Left side: Selectors */}
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
               {/* Key Selector */}
               {keys.length > 0 && (
-                <DropdownSelect
-                  options={keyOptions}
-                  value={selectedKeyId}
-                  onChange={handleKeyChange}
-                  direction="up"
-                />
+                <div className="max-w-[130px] sm:max-w-none">
+                  <DropdownSelect
+                    options={keyOptions}
+                    value={selectedKeyId}
+                    onChange={handleKeyChange}
+                    direction="up"
+                  />
+                </div>
               )}
 
               {/* Model Selector */}
-              <DropdownSelect
-                options={modelOptions}
-                value={selectedModel}
-                onChange={setSelectedModel}
-                direction="up"
-              />
+              <div className="max-w-[140px] sm:max-w-none">
+                <DropdownSelect
+                  options={modelOptions}
+                  value={selectedModel}
+                  onChange={setSelectedModel}
+                  direction="up"
+                />
+              </div>
 
-              {/* Thinking */}
-              <div className="flex items-center gap-0.5 bg-white/[0.03] border border-white/[0.05] p-0.5 rounded-lg">
+              {/* Thinking Selector: Dropdown on mobile, inline pills on tablet/desktop */}
+              <div className="block sm:hidden">
+                <DropdownSelect
+                  options={[
+                    { value: "none", label: "think: off" },
+                    { value: "low", label: "think: low" },
+                    { value: "medium", label: "think: med" },
+                    { value: "high", label: "think: high" },
+                  ]}
+                  value={thinkingLevel}
+                  onChange={(val) => setThinkingLevel(val as any)}
+                  direction="up"
+                />
+              </div>
+
+              <div className="hidden sm:flex items-center gap-0.5 bg-white/[0.03] border border-white/[0.05] p-0.5 rounded-lg shrink-0">
                 {thinkingOpts.map((o) => (
                   <button
                     key={o.id}
                     type="button"
                     onClick={() => setThinkingLevel(o.id)}
-                    className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                    className={`px-2 py-0.5 rounded-md transition-all cursor-pointer text-[11px] ${
                       thinkingLevel === o.id
                         ? "text-white bg-white/[0.12] font-medium shadow-xs"
                         : "text-neutral-500 hover:text-neutral-300"
@@ -197,14 +216,23 @@ export function ChatInputDeck({
               </div>
             </div>
 
-            <Button
-              type="button"
-              size="sm"
-              onClick={triggerSubmit}
-              disabled={disabled || !input.trim()}
-            >
-              {disabled ? "..." : "Send ↵"}
-            </Button>
+            {/* Right side: Send button */}
+            <div className="shrink-0 self-end sm:self-center">
+              <Button
+                type="button"
+                size="sm"
+                onClick={triggerSubmit}
+                disabled={disabled || !input.trim()}
+                className="px-3 py-1.5 sm:px-3.5 sm:py-1 font-mono text-xs shadow-none"
+              >
+                {disabled ? "..." : (
+                  <span className="flex items-center gap-1">
+                    <span>Send</span>
+                    <span className="hidden sm:inline">↵</span>
+                  </span>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </div>

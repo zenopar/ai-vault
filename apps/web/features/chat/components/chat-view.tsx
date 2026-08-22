@@ -169,10 +169,10 @@ export function ChatView({
         <button
           type="button"
           onClick={() => setSidebarOpen(true)}
-          className="fixed top-3 left-3 z-30 md:hidden p-2 rounded-xl bg-[#14151a]/90 backdrop-blur border border-white/[0.08] text-neutral-400 hover:text-white shadow-lg cursor-pointer transition-colors"
+          className="fixed top-3 left-3 z-30 md:hidden p-2 rounded-lg bg-[#14151a]/80 backdrop-blur-md border border-white/[0.08] text-neutral-400 hover:text-white shadow-md cursor-pointer transition-colors"
           title="Open sidebar"
         >
-          <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
