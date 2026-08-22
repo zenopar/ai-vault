@@ -127,3 +127,21 @@ model messages {
   @@index([parent_message_id], map: "idx_messages_parent_id")
   @@schema("vault")
 }
+
+model settings {
+  id                             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  encryption_version             Int      @default(1)
+  encrypted_system_prompt        String?
+  system_prompt_iv               String?  @db.VarChar(32)
+  system_prompt_tag              String?  @db.VarChar(32)
+  encrypted_token_tiers          String?
+  token_tiers_iv                 String?  @db.VarChar(32)
+  token_tiers_tag                String?  @db.VarChar(32)
+  encrypted_max_cost_per_request String?
+  max_cost_per_request_iv        String?  @db.VarChar(32)
+  max_cost_per_request_tag       String?  @db.VarChar(32)
+  created_at                     DateTime @default(now()) @db.Timestamptz(6)
+  updated_at                     DateTime @default(now()) @db.Timestamptz(6)
+
+  @@schema("vault")
+}
