@@ -241,6 +241,43 @@ export function createVaultHttpServer() {
         return;
       }
 
+      // 8. Lock Vault / Destroy Session
+      if (method === "POST" && pathname === "/lock") {
+        const body = (await readJsonBody<{ token?: string; all?: boolean }>(req).catch(() => ({}))) as {
+          token?: string;
+          all?: boolean;
+        };
+        const token =
+          body.token ||
+          (typeof req.headers["x-session-token"] === "string" ? req.headers["x-session-token"] : undefined);
+
+        if (body.all || !token) {
+          vaultState.lock();
+        } else {
+          vaultState.destroySession(token);
+        }
+
+        sendJson(res, 200, { success: true, isUnlocked: vaultState.isUnlocked() });
+        return;
+      }
+
+      // 9. Touch session / Refresh activity timestamp
+      if (method === "POST" && pathname === "/touch") {
+        const body = (await readJsonBody<{ token?: string }>(req).catch(() => ({}))) as {
+          token?: string;
+        };
+        const token =
+          body.token ||
+          (typeof req.headers["x-session-token"] === "string" ? req.headers["x-session-token"] : undefined);
+
+        vaultState.touch(token);
+        sendJson(res, 200, {
+          success: true,
+          lastActivityAt: vaultState.getLastActivityAt()?.toISOString() ?? null,
+        });
+        return;
+      }
+
       // 8. Add and encrypt AI API key
       if (method === "POST" && pathname === "/keys") {
         const body = await readJsonBody<{ provider?: string; name?: string; apiKey?: string }>(req);

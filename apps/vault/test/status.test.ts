@@ -82,5 +82,7 @@ describe("Vault Status Service", () => {
     expect(status.status).toBe("UNLOCKED");
     expect(status.isUnlocked).toBe(true);
     expect(status.unlockedAt).toBeDefined();
+    expect(status.lastActivityAt).toBeDefined();
+    expect(status.inactivityTimeoutMs).toBe(3600000);
   });
 });

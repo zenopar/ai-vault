@@ -16,6 +16,8 @@ export interface VaultStatusResult {
   version?: number;
   kdfParams?: VaultKdfParams;
   unlockedAt?: string | null;
+  lastActivityAt?: string | null;
+  inactivityTimeoutMs?: number;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -48,6 +50,8 @@ export async function getVaultStatus(): Promise<VaultStatusResult> {
         parallelism: config.kdf_parallelism,
       },
       unlockedAt: vaultState.getUnlockedAt()?.toISOString() ?? null,
+      lastActivityAt: vaultState.getLastActivityAt()?.toISOString() ?? null,
+      inactivityTimeoutMs: vaultState.getInactivityTimeoutMs(),
       createdAt: config.created_at.toISOString(),
       updatedAt: config.updated_at.toISOString(),
     };

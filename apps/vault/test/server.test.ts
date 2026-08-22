@@ -111,4 +111,36 @@ describe("Vault HTTP Server", () => {
       error: "Forbidden: Invalid Host header. Vault only accepts localhost/127.0.0.1",
     });
   });
+
+  it("POST /lock should lock the vault and clear sessions", async () => {
+    const rawKey = Buffer.alloc(32, 0x99);
+    const token = vaultState.createSession(rawKey);
+    expect(vaultState.isUnlocked()).toBe(true);
+
+    const res = await request(server)
+      .post("/lock")
+      .set("x-vault-secret", process.env["VAULT_IPC_SECRET"] || "asd")
+      .set("x-session-token", token)
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.isUnlocked).toBe(false);
+    expect(vaultState.isUnlocked()).toBe(false);
+  });
+
+  it("POST /touch should update last activity timestamp", async () => {
+    const rawKey = Buffer.alloc(32, 0x88);
+    const token = vaultState.createSession(rawKey);
+
+    const res = await request(server)
+      .post("/touch")
+      .set("x-vault-secret", process.env["VAULT_IPC_SECRET"] || "asd")
+      .set("x-session-token", token)
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.lastActivityAt).toBeDefined();
+  });
 });

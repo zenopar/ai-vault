@@ -11,6 +11,8 @@ import {
   EncryptedData 
 } from "./crypto.js";
 
+export const DEFAULT_INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour
+
 export class VaultLockedError extends Error {
   constructor(message = "Vault is locked. Unlock the vault first.") {
     super(message);
@@ -23,7 +25,10 @@ export class VaultLockedError extends Error {
  * Plaintext master key does NOT exist at rest in memory.
  */
 export interface VaultSession {
+  createdAt: Date;
+  lastActivityAt: Date;
   expiresAt: Date;
+  inactivityTimeoutMs: number;
   wrappedVaultKey: EncryptedData;
 }
 
@@ -45,15 +50,59 @@ class VaultStateManager {
     sessions: new Map(),
   };
 
+  private autoLockTimer: NodeJS.Timeout | null = null;
+
+  private clearAutoLockTimer(): void {
+    if (this.autoLockTimer) {
+      clearTimeout(this.autoLockTimer);
+      this.autoLockTimer = null;
+    }
+  }
+
+  private scheduleAutoLockCheck(): void {
+    this.clearAutoLockTimer();
+    if (this.state.sessions.size === 0) return;
+
+    const now = Date.now();
+    let earliestDeadline = Infinity;
+
+    for (const session of this.state.sessions.values()) {
+      const inactivityDeadline = session.lastActivityAt.getTime() + session.inactivityTimeoutMs;
+      const expiryDeadline = session.expiresAt.getTime();
+      const deadline = Math.min(inactivityDeadline, expiryDeadline);
+      if (deadline < earliestDeadline) {
+        earliestDeadline = deadline;
+      }
+    }
+
+    if (earliestDeadline === Infinity) return;
+
+    const delay = Math.max(0, earliestDeadline - now);
+    const clampedDelay = Math.min(delay, 2147483647);
+
+    this.autoLockTimer = setTimeout(() => {
+      this.cleanupExpiredSessions();
+      this.scheduleAutoLockCheck();
+    }, clampedDelay);
+
+    if (typeof this.autoLockTimer.unref === "function") {
+      this.autoLockTimer.unref();
+    }
+  }
+
   private cleanupExpiredSessions(): number {
-    const now = new Date();
+    const now = Date.now();
     for (const [tokenHash, session] of this.state.sessions.entries()) {
-      if (now > session.expiresAt) {
+      const isInactive = now - session.lastActivityAt.getTime() > session.inactivityTimeoutMs;
+      const isExpired = now > session.expiresAt.getTime();
+      if (isInactive || isExpired) {
         this.state.sessions.delete(tokenHash);
       }
     }
     if (this.state.sessions.size === 0) {
       this.state.unlockedAt = null;
+      this.state.lastActivityAt = null;
+      this.clearAutoLockTimer();
     }
     return this.state.sessions.size;
   }
@@ -63,21 +112,35 @@ class VaultStateManager {
   }
 
   public getUnlockedAt(): Date | null {
+    if (this.cleanupExpiredSessions() === 0) return null;
     return this.state.unlockedAt;
   }
 
   public getLastActivityAt(): Date | null {
+    if (this.cleanupExpiredSessions() === 0) return null;
     return this.state.lastActivityAt;
+  }
+
+  public getInactivityTimeoutMs(): number {
+    return DEFAULT_INACTIVITY_TIMEOUT_MS;
   }
 
   public getSessionCount(): number {
     return this.cleanupExpiredSessions();
   }
 
-  public touch(): void {
-    if (this.isUnlocked()) {
-      this.state.lastActivityAt = new Date();
+  public touch(token?: string): void {
+    if (this.cleanupExpiredSessions() === 0) return;
+    const now = new Date();
+    if (token) {
+      const tokenHash = this.hashToken(token);
+      const session = this.state.sessions.get(tokenHash);
+      if (session) {
+        session.lastActivityAt = now;
+      }
     }
+    this.state.lastActivityAt = now;
+    this.scheduleAutoLockCheck();
   }
 
   private hashToken(token: string): string {
@@ -90,7 +153,10 @@ class VaultStateManager {
    * 
    * Note: The caller must immediately overwrite/zeroize their plaintext vaultKey buffer.
    */
-  public createSession(vaultKey: Buffer, options?: { expiresInMs?: number; wipeSourceKey?: boolean }): string {
+  public createSession(
+    vaultKey: Buffer,
+    options?: { expiresInMs?: number; inactivityTimeoutMs?: number; wipeSourceKey?: boolean }
+  ): string {
     if (!vaultKey || vaultKey.length !== 32) {
       throw new Error("Invalid vault key length for session encryption.");
     }
@@ -98,9 +164,11 @@ class VaultStateManager {
     const token = crypto.randomBytes(32).toString("hex");
     const tokenHash = this.hashToken(token);
     
-    // Default 24 hours expiry
+    // Default 24 hours absolute expiry, 1 hour inactivity timeout
     const expiryMs = options?.expiresInMs ?? 24 * 60 * 60 * 1000;
-    const expiresAt = new Date(Date.now() + expiryMs);
+    const inactivityTimeoutMs = options?.inactivityTimeoutMs ?? DEFAULT_INACTIVITY_TIMEOUT_MS;
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + expiryMs);
 
     // Derive wrapping key from session token
     const sessionWrappingKey = sessionTokenToKey(token);
@@ -118,15 +186,18 @@ class VaultStateManager {
     }
 
     this.state.sessions.set(tokenHash, {
+      createdAt: now,
+      lastActivityAt: now,
       expiresAt,
+      inactivityTimeoutMs,
       wrappedVaultKey,
     });
 
-    const now = new Date();
     if (!this.state.unlockedAt) {
       this.state.unlockedAt = now;
     }
     this.state.lastActivityAt = now;
+    this.scheduleAutoLockCheck();
 
     return token;
   }
@@ -134,11 +205,11 @@ class VaultStateManager {
   /**
    * Helper to set unlocked state with a vault key, creating an initial session.
    */
-  public setUnlocked(vaultKey: Buffer): string {
-    return this.createSession(vaultKey);
+  public setUnlocked(vaultKey: Buffer, options?: { expiresInMs?: number; inactivityTimeoutMs?: number }): string {
+    return this.createSession(vaultKey, options);
   }
 
-  public verifySession(token: string): boolean {
+  public verifySession(token: string, options?: { touch?: boolean }): boolean {
     if (!token) return false;
     const tokenHash = this.hashToken(token);
     const session = this.state.sessions.get(tokenHash);
@@ -147,12 +218,25 @@ class VaultStateManager {
       return false;
     }
 
-    if (new Date() > session.expiresAt) {
+    const now = Date.now();
+    const isInactive = now - session.lastActivityAt.getTime() > session.inactivityTimeoutMs;
+    const isExpired = now > session.expiresAt.getTime();
+
+    if (isInactive || isExpired) {
       this.state.sessions.delete(tokenHash);
       if (this.state.sessions.size === 0) {
         this.state.unlockedAt = null;
+        this.state.lastActivityAt = null;
+        this.clearAutoLockTimer();
       }
       return false;
+    }
+
+    if (options?.touch !== false) {
+      const nowDate = new Date();
+      session.lastActivityAt = nowDate;
+      this.state.lastActivityAt = nowDate;
+      this.scheduleAutoLockCheck();
     }
 
     return true;
@@ -164,11 +248,16 @@ class VaultStateManager {
     const existed = this.state.sessions.delete(tokenHash);
     if (this.state.sessions.size === 0) {
       this.state.unlockedAt = null;
+      this.state.lastActivityAt = null;
+      this.clearAutoLockTimer();
+    } else {
+      this.scheduleAutoLockCheck();
     }
     return existed;
   }
 
   public lock(): void {
+    this.clearAutoLockTimer();
     this.state.sessions.clear();
     this.state.unlockedAt = null;
     this.state.lastActivityAt = null;
@@ -193,12 +282,22 @@ class VaultStateManager {
       throw new VaultLockedError("Vault is locked or session does not exist.");
     }
 
-    if (new Date() > session.expiresAt) {
+    const now = Date.now();
+    const isInactive = now - session.lastActivityAt.getTime() > session.inactivityTimeoutMs;
+    const isExpired = now > session.expiresAt.getTime();
+
+    if (isInactive || isExpired) {
       this.state.sessions.delete(tokenHash);
       if (this.state.sessions.size === 0) {
         this.state.unlockedAt = null;
+        this.state.lastActivityAt = null;
+        this.clearAutoLockTimer();
       }
-      throw new VaultLockedError("Session has expired. Please unlock the vault again.");
+      throw new VaultLockedError(
+        isInactive
+          ? "Vault locked due to 1 hour of inactivity. Please unlock the vault again."
+          : "Session has expired. Please unlock the vault again."
+      );
     }
 
     const sessionWrappingKey = sessionTokenToKey(sessionToken);
@@ -211,7 +310,11 @@ class VaultStateManager {
     }
 
     try {
-      this.state.lastActivityAt = new Date();
+      const nowDate = new Date();
+      session.lastActivityAt = nowDate;
+      this.state.lastActivityAt = nowDate;
+      this.scheduleAutoLockCheck();
+
       return await callback(decryptedVaultKey);
     } finally {
       // Guarantee immediate zeroization of decrypted master key
