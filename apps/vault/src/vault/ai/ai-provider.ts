@@ -117,7 +117,8 @@ async function callGemini(
   maxOutputTokens: number = 2000,
   thinkingLevel: string = "medium"
 ): Promise<{ text: string; inputTokens?: number; outputTokens?: number; thoughtTokens?: number; thinkingLevel?: string }> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  const cleanModel = model.replace(/^models\//, "");
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cleanModel)}:generateContent`;
 
   const finalSystemInstructionText = messages.find((m) => m.role === "system")?.content || "";
 
@@ -128,7 +129,26 @@ async function callGemini(
       parts: [{ text: m.content }],
     }));
 
-  const isGeminiThinkingModel = model.includes("2.5") || model.includes("3.7") || model.includes("thinking");
+  const generationConfig: Record<string, any> = {
+    max_output_tokens: maxOutputTokens,
+  };
+
+  if (thinkingLevel && thinkingLevel !== "none") {
+    generationConfig.thinking_config = {
+      thinking_level: thinkingLevel,
+    };
+  }
+
+  const payload: Record<string, any> = {
+    contents,
+    generation_config: generationConfig,
+  };
+
+  if (finalSystemInstructionText) {
+    payload.system_instruction = {
+      parts: [{ text: finalSystemInstructionText }],
+    };
+  }
 
   const res = await fetch(url, {
     method: "POST",
@@ -136,29 +156,7 @@ async function callGemini(
       "Content-Type": "application/json",
       "x-goog-api-key": apiKey,
     },
-    body: JSON.stringify({
-      systemInstruction: {
-        parts: [{ text: finalSystemInstructionText }]
-      },
-      contents,
-      generationConfig: {
-        maxOutputTokens,
-        temperature: 0.4,
-        ...(thinkingLevel !== "none"
-          ? {
-              thinkingConfig: {
-                thinkingLevel: thinkingLevel,
-              },
-            }
-          : isGeminiThinkingModel
-          ? {
-              thinkingConfig: {
-                thinkingBudget: 0,
-              },
-            }
-          : {}),
-      },
-    }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
@@ -168,15 +166,20 @@ async function callGemini(
   }
 
   const data = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    candidates?: {
+      content?: { parts?: { text?: string }[] };
+    }[];
     usageMetadata?: {
       promptTokenCount?: number;
       candidatesTokenCount?: number;
       totalTokenCount?: number;
+      thoughtsTokenCount?: number;
+      thinkingTokenCount?: number;
     };
   };
+
   const candidate = data.candidates?.[0];
-  const partText = candidate?.content?.parts?.[0]?.text;
+  const partText = candidate?.content?.parts?.map((p) => p.text).join("");
 
   if (!partText) {
     throw new Error("No text response received from Gemini API");
@@ -186,7 +189,10 @@ async function callGemini(
     text: partText,
     inputTokens: data.usageMetadata?.promptTokenCount,
     outputTokens: data.usageMetadata?.candidatesTokenCount,
-    thoughtTokens: (data.usageMetadata as any)?.thoughtsTokenCount ?? (data.usageMetadata as any)?.thinkingTokenCount ?? (data.usageMetadata as any)?.reasoningTokenCount,
+    thoughtTokens:
+      (data.usageMetadata as any)?.thoughtsTokenCount ??
+      (data.usageMetadata as any)?.thinkingTokenCount ??
+      (data.usageMetadata as any)?.reasoningTokenCount,
     thinkingLevel,
   };
 }

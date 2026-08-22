@@ -192,10 +192,8 @@ describe("End-to-End Chat & Messaging API (Unit Tests / Mock AI)", () => {
     global.fetch = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
       if (url.includes("generativelanguage.googleapis.com")) {
         capturedRequestBody = JSON.parse(init?.body as string);
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
+        return new Response(
+          JSON.stringify({
             candidates: [
               {
                 content: {
@@ -209,9 +207,13 @@ describe("End-to-End Chat & Messaging API (Unit Tests / Mock AI)", () => {
               thinkingTokenCount: 20,
             },
           }),
-        };
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
       }
-      return { ok: false, status: 404, text: async () => "Not Found" };
+      return new Response("Not Found", { status: 404 });
     });
 
     const res = await request(server)
@@ -230,7 +232,7 @@ describe("End-to-End Chat & Messaging API (Unit Tests / Mock AI)", () => {
     expect(res.body.assistantMessage.thinkingLevel).toBe("high");
     expect(res.body.assistantMessage.thoughtTokens).toBe(20);
     expect(capturedRequestBody).toBeDefined();
-    expect(capturedRequestBody.generationConfig.thinkingConfig.thinkingLevel).toBe("high");
+    expect(capturedRequestBody.generation_config.thinking_config.thinking_level).toBe("high");
 
     // Also test with thinkingLevel: "none"
     const resNone = await request(server)
@@ -247,6 +249,6 @@ describe("End-to-End Chat & Messaging API (Unit Tests / Mock AI)", () => {
 
     expect(resNone.status).toBe(200);
     expect(resNone.body.assistantMessage.thinkingLevel).toBe("none");
-    expect(capturedRequestBody.generationConfig.thinkingConfig.thinkingBudget).toBe(0);
+    expect(capturedRequestBody.generation_config.thinking_config).toBeUndefined();
   });
 });
