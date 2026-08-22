@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { initVaultAction, completeInitAction } from "../actions/init-vault.action";
+import { Button, Input, Card, ErrorAlert } from "@/shared/components";
 
 export function InitVaultForm() {
   const [password, setPassword] = useState("");
@@ -16,11 +17,10 @@ export function InitVaultForm() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    
-    // Pass FormData instead of raw string to prevent Next.js from logging the password
+
     const formData = new FormData(e.currentTarget);
     const result = await initVaultAction(formData);
-    
+
     if (result.success && result.recoveryPassword) {
       setRecoveryCode(result.recoveryPassword);
       if (result.sessionToken) {
@@ -29,7 +29,7 @@ export function InitVaultForm() {
     } else {
       setError(result.error || "Failed to initialize");
     }
-    
+
     setLoading(false);
   };
 
@@ -49,68 +49,80 @@ export function InitVaultForm() {
 
   if (recoveryCode) {
     return (
-      <div className="w-full max-w-md mx-auto p-8 mt-12 bg-white rounded-lg shadow-md border border-gray-100">
-        <h2 className="text-2xl font-bold text-green-600 mb-4">Vault Initialized Successfully</h2>
-        <p className="text-gray-700 mb-6">
-          Please save your recovery code. <strong className="font-semibold text-red-600">You will never see it again:</strong>
-        </p>
-        <div className="relative mb-6">
-          <code className="block w-full bg-gray-50 text-gray-900 border border-gray-200 rounded p-4 text-center text-xl font-mono tracking-wider font-bold select-all">
-            {recoveryCode}
-          </code>
+      <Card className="w-full max-w-md mx-auto p-8 animate-enter space-y-6">
+        <div className="text-center space-y-1.5">
+          <h2 className="text-lg font-medium text-neutral-100 tracking-tight font-sans">
+            Save Recovery Code
+          </h2>
+          <p className="text-xs text-neutral-400 leading-relaxed">
+            Store this in a secure place. <span className="text-amber-400/90 font-medium">It will never be displayed again.</span>
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <div className="p-4 rounded-xl bg-[#181920] border border-white/[0.08] text-center shadow-inner">
+            <code className="text-base sm:text-lg font-mono font-bold tracking-widest text-neutral-100 select-all block break-all">
+              {recoveryCode}
+            </code>
+          </div>
           <button
             type="button"
             onClick={handleCopy}
-            className="mt-2 text-sm text-gray-600 hover:text-black font-medium underline flex items-center justify-center w-full"
+            className="w-full py-2 text-xs font-mono text-neutral-400 hover:text-white transition-colors cursor-pointer text-center"
           >
-            {copied ? "✓ Copied to clipboard" : "Copy recovery code"}
+            {copied ? "✓ copied to clipboard" : "copy recovery code"}
           </button>
         </div>
-        <button 
+
+        <Button
           onClick={handleContinue}
-          disabled={redirecting}
-          className="w-full px-4 py-2 text-white bg-black rounded-md hover:bg-gray-800 transition-colors font-medium cursor-pointer disabled:bg-gray-400"
+          isLoading={redirecting}
+          size="lg"
         >
-          {redirecting ? "Redirecting..." : "I have saved the code, continue to App"}
-        </button>
-      </div>
+          I have saved the code, continue to App
+        </Button>
+      </Card>
     );
   }
 
   return (
-    <div className="w-full max-w-md mx-auto p-8 mt-12 bg-white rounded-lg shadow-md border border-gray-100">
-      <h2 className="text-2xl font-bold text-gray-900 mb-2">Initialize Vault</h2>
-      <p className="text-gray-500 text-sm mb-6">
-        Enter a strong master password (min 16 chars, upper, lower, number, special).
-      </p>
-      
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <div>
-          <input 
-            type="password" 
-            name="masterPassword"
-            value={password} 
-            onChange={(e) => setPassword(e.target.value)} 
-            placeholder="Master Password" 
-            required 
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-colors"
-          />
-        </div>
-        
-        {error && (
-          <div className="p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md">
-            {error}
-          </div>
-        )}
-        
-        <button 
-          type="submit" 
-          disabled={loading} 
-          className="w-full px-4 py-2 mt-2 text-white bg-black rounded-md hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
+    <Card className="w-full max-w-sm mx-auto p-8 animate-enter">
+      <div className="text-center space-y-1.5 mb-6">
+        <h2 className="text-lg font-medium text-neutral-100 tracking-tight font-sans">
+          Initialize AI Vault
+        </h2>
+        <p className="text-xs text-neutral-500 leading-relaxed font-mono">
+          min 16 chars · upper · lower · number · symbol
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Input
+          type="password"
+          name="masterPassword"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Create Master Password"
+          required
+          autoFocus
+          isMono
+        />
+
+        <ErrorAlert message={error} onDismiss={() => setError(null)} />
+
+        <Button
+          type="submit"
+          isLoading={loading}
+          size="lg"
+          className="mt-2"
         >
-          {loading ? "Initializing..." : "Initialize"}
-        </button>
+          Initialize Vault
+        </Button>
       </form>
-    </div>
+    </Card>
   );
 }
+
+
+
+
