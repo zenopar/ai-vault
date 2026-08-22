@@ -78,12 +78,8 @@ export async function initVault(masterPassword: string): Promise<VaultInitRespon
       wrapped_vault_key_recovery_tag: wrappedRecoveryKey.tag,
     });
 
-    // Load into RAM immediately
-    vaultState.setUnlocked(vaultKey);
-    initialized = true;
-
-    // Create session token and store hash in RAM
-    const sessionToken = vaultState.createSession();
+    // Encrypt master vault key with new session token and load into RAM
+    const sessionToken = vaultState.createSession(vaultKey);
 
     return {
       success: true,
@@ -91,7 +87,8 @@ export async function initVault(masterPassword: string): Promise<VaultInitRespon
       sessionToken,
     };
   } finally {
-    if (!initialized && vaultKey) {
+    // Strictly overwrite and wipe plaintext vault key buffer immediately
+    if (vaultKey) {
       vaultKey.fill(0);
     }
   }

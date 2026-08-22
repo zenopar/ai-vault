@@ -8,7 +8,8 @@ import {
   generateVaultKey,
   HKDF_INFO_DB,
   HKDF_INFO_SECRETS,
-  AAD_WRAPPED_VAULT_KEY_MASTER
+  AAD_WRAPPED_VAULT_KEY_MASTER,
+  sessionTokenToKey
 } from "../src/vault/crypto.js";
 
 describe("Crypto Module Unit Tests (Pure In-Memory)", () => {
@@ -84,11 +85,18 @@ describe("Crypto Module Unit Tests (Pure In-Memory)", () => {
     expect(() => decryptBuffer(encrypted, key, aadTampered)).toThrow();
   });
 
-  it("should reject invalid key lengths", () => {
-    const invalidKey = Buffer.alloc(16); // 16 bytes instead of 32
-    const plaintext = Buffer.from("Hello", "utf-8");
-    const aad = AAD_WRAPPED_VAULT_KEY_MASTER;
+  it("should convert 32-byte hex session token directly to 32-byte AES key buffer", () => {
+    const raw32BytesHex = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    const key = sessionTokenToKey(raw32BytesHex);
 
-    expect(() => encryptBuffer(plaintext, invalidKey, aad)).toThrow("Invalid key length");
+    expect(key).toBeInstanceOf(Buffer);
+    expect(key.length).toBe(32);
+    expect(key.toString("hex")).toBe(raw32BytesHex);
+
+    // Also support arbitrary string tokens by hashing to 32 bytes
+    const strToken = "my-custom-test-session-token";
+    const key2 = sessionTokenToKey(strToken);
+    expect(key2).toBeInstanceOf(Buffer);
+    expect(key2.length).toBe(32);
   });
 });

@@ -12,6 +12,7 @@ export interface AiExecutionParams {
   model?: string;
   maxOutputTokens?: number;
   thinkingLevel?: "low" | "medium" | "high" | "none";
+  sessionToken: string;
 }
 
 export interface AiExecutionResult {
@@ -72,7 +73,7 @@ export async function executeAiCompletion(params: AiExecutionParams): Promise<Ai
   }
 
   const provider = selectedKeyRecord.provider.toLowerCase();
-  const apiKey = await getDecryptedApiKey(selectedKeyRecord.id);
+  const apiKey = await getDecryptedApiKey(selectedKeyRecord.id, params.sessionToken);
 
   let model = params.model;
   let thinkingLevel: string = params.thinkingLevel !== undefined ? params.thinkingLevel : (provider === "google" ? "medium" : "none");

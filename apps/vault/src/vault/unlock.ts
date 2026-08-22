@@ -90,14 +90,18 @@ export async function unlockVault(password: string): Promise<VaultUnlockResponse
     throw new InvalidCredentialsError();
   }
 
-  // Successfully unlocked, load into RAM
-  vaultState.setUnlocked(vaultKey);
+  try {
+    // Encrypt master vault key with new session token and load into RAM
+    const sessionToken = vaultState.createSession(vaultKey);
 
-  // Create session token and store hash in RAM
-  const sessionToken = vaultState.createSession();
-
-  return {
-    success: true,
-    sessionToken,
-  };
+    return {
+      success: true,
+      sessionToken,
+    };
+  } finally {
+    // Strictly overwrite and wipe plaintext vault key buffer immediately
+    if (vaultKey) {
+      vaultKey.fill(0);
+    }
+  }
 }

@@ -12,21 +12,6 @@ export class ChatNotFoundError extends Error {
   }
 }
 
-/**
- * Ensures the vault is unlocked and the database key is present.
- * Throws VaultLockedError if not.
- */
-export function requireDbKey(): Buffer {
-  if (!vaultState.isUnlocked()) {
-    throw new VaultLockedError();
-  }
-  const dbKey = vaultState.getDbKey();
-  if (!dbKey) {
-    throw new VaultLockedError("Database encryption key is unavailable in memory.");
-  }
-  return dbKey;
-}
-
 // === 2. CRYPTO HELPERS ===
 
 export interface DecryptedChatFields {

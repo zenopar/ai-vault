@@ -71,6 +71,18 @@ export const HKDF_INFO_SECRETS = Buffer.from("ai-vault/secrets/v1", "utf-8");
 
 export const AAD_WRAPPED_VAULT_KEY_MASTER = Buffer.from("ai-vault/wrapped-vault-key/master/v1", "utf-8");
 export const AAD_WRAPPED_VAULT_KEY_RECOVERY = Buffer.from("ai-vault/wrapped-vault-key/recovery/v1", "utf-8");
+export const AAD_WRAPPED_VAULT_KEY_SESSION = Buffer.from("ai-vault/wrapped-vault-key/session/v1", "utf-8");
+
+/**
+ * Converts a 32-byte hex session token directly into a 32-byte AES-256 buffer key.
+ */
+export function sessionTokenToKey(sessionToken: string): Buffer {
+  // If 64 hex characters (32 bytes), parse hex directly; otherwise derive 32-byte SHA-256 digest
+  if (/^[0-9a-fA-F]{64}$/.test(sessionToken)) {
+    return Buffer.from(sessionToken, "hex");
+  }
+  return crypto.createHash("sha256").update(sessionToken).digest();
+}
 
 /**
  * Derives a sub-key from a master key using HKDF-SHA256

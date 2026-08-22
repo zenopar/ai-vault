@@ -48,11 +48,14 @@ describe("End-to-End Chat & Messaging API (Unit Tests / Mock AI)", () => {
     const initResult = await initVault("SecureMasterPassword123!");
     const sessionToken = initResult.sessionToken!;
 
-    await addApiKey({
-      provider: "openai",
-      name: "Main OpenAI Key",
-      apiKey: "sk-proj-test-key-12345",
-    });
+    await addApiKey(
+      {
+        provider: "openai",
+        name: "Main OpenAI Key",
+        apiKey: "sk-proj-test-key-12345",
+      },
+      sessionToken
+    );
 
     // 2. Mock fetch for OpenAI API call
     const mockAiResponse = "Hello! I am your private, zero-trust AI assistant.";
@@ -182,11 +185,14 @@ describe("End-to-End Chat & Messaging API (Unit Tests / Mock AI)", () => {
     const initResult = await initVault("SecureMasterPassword123!");
     const sessionToken = initResult.sessionToken!;
 
-    await addApiKey({
-      provider: "google",
-      name: "Google Key",
-      apiKey: "AIzaSyTestKey123",
-    });
+    await addApiKey(
+      {
+        provider: "google",
+        name: "Google Key",
+        apiKey: "AIzaSyTestKey123",
+      },
+      sessionToken
+    );
 
     let capturedRequestBody: any = null;
     global.fetch = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {

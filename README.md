@@ -76,12 +76,24 @@ To prevent a vulnerability in the web framework from compromising the cryptograp
                           │
              VAULT MASTER KEY (256-bit Random)
                           │
-      ┌───────────────────┼───────────────────┐
-      │                   │                   │
-  HKDF-SHA256        HKDF-SHA256         HKDF-SHA256
-      ▼                   ▼                   ▼
-   DB Key             File Master Key      Secrets Key
-("ai-vault/db/v1") ("ai-vault/files/v1") ("ai-vault/secrets/v1")
+           ┌──────────────┴──────────────┐
+           │ (Immediately wrapped in RAM)│
+           ▼                             ▼
+    SESSION TOKEN A               SESSION TOKEN B
+ (Raw 256-bit AES-GCM Key)     (Raw 256-bit AES-GCM Key)
+           │                             │
+    AES-GCM Wrapped               AES-GCM Wrapped
+   Vault Key in RAM              Vault Key in RAM
+  [Plaintext Wiped]             [Plaintext Wiped]
+           │                             │
+  (Transient Decryption)        (Transient Decryption)
+           ▼                             ▼
+       ┌───────────────────┼───────────────────┐
+       │                   │                   │
+   HKDF-SHA256        HKDF-SHA256         HKDF-SHA256
+       ▼                   ▼                   ▼
+    DB Key             File Master Key      Secrets Key
+ ("ai-vault/db/v1") ("ai-vault/files/v1") ("ai-vault/secrets/v1")
 ```
 
 1. **Vault Initialization**:
@@ -89,9 +101,13 @@ To prevent a vulnerability in the web framework from compromising the cryptograp
    - Master Password + Random Salt are derived using a verified **Argon2id** library (not native Node PBKDF2).
      - *Target*: e.g., 256 MiB memory, 3 iterations, tuned to ~1s compute time on the host server.
    - Explicit KDF parameters (`kdf_algorithm`, `memory_cost`, `time_cost`, `salt`) are stored in plaintext to allow future migrations.
-2. **Domain Separation via HKDF**:
-   Sub-keys are derived using HKDF with explicit domain info strings (e.g., `"ai-vault/db/v1"`).
-3. **Dual Recovery Mechanism**:
+2. **Immediate Plaintext Zeroization & In-Memory Session Wrapping**:
+   - Upon initialization (`initVault`) or unlocking (`unlockVault`), the plaintext `vaultKey` is **immediately encrypted in RAM** with a 256-bit key derived directly from the issued `sessionToken` (using AES-256-GCM bound to `AAD_WRAPPED_VAULT_KEY_SESSION`).
+   - The plaintext `vaultKey` buffer is **immediately overwritten with zeros (`.fill(0)`) and wiped from memory**.
+   - At rest in RAM, **zero plaintext master keys exist**.
+3. **Domain Separation via HKDF**:
+   Sub-keys (`dbKey`, `fileMasterKey`, `secretsKey`) are derived on demand during authenticated execution scopes using HKDF with explicit domain info strings (e.g., `"ai-vault/db/v1"`).
+4. **Dual Recovery Mechanism**:
    A high-entropy 256-bit Recovery Code is generated on setup. The Vault Key is wrapped *twice* and stored in the database:
    - `wrapped_vault_key` (Unwrapped by Master Password KEK)
    - `wrapped_vault_key_recovery` (Unwrapped by Recovery Code KEK)
@@ -102,13 +118,24 @@ To prevent a vulnerability in the web framework from compromising the cryptograp
 
 ### 3. Session & Vault State Management
 
-- **Hashed Session Tokens**:
-  - The client receives an opaque 256-bit random `session_id` in an `HttpOnly`, `Secure`, `SameSite=Strict` cookie.
-  - The database only stores `H(session_id)` (the hash of the token), preventing an attacker with a DB dump from immediately hijacking active sessions.
+- **Zero-Plaintext In-Memory Architecture**:
+  - The client holds the opaque 256-bit random `sessionToken` in an `HttpOnly`, `Secure`, `SameSite=Strict` cookie / `x-session-token` header.
+  - The Vault Service memory stores only:
+    $$\text{sessions: Map}\langle \text{SHA256}(\text{sessionToken}), \{ \text{wrappedVaultKey}, \text{expiresAt} \} \rangle$$
+  - The raw session token is **never** permanently stored in the Vault Service's memory.
+- **Transient Scoped Key Decryption**:
+  - When an authorized request arrives with `x-session-token`, the vault verifies the hash against its active sessions map.
+  - The raw session token transiently decrypts the `vaultKey` and derives the required sub-key (`dbKey`, `secretsKey`, or `fileMasterKey`) exclusively for the duration of the request callback.
+  - In a `finally` block, all decrypted plaintext key buffers are **strictly zeroized (`.fill(0)`)**.
+- **Multi-Session Isolation**:
+  - If a user unlocks or logs in from multiple devices/tabs, each session receives its own `sessionToken` and holds an independent encrypted instance of the `vaultKey` in RAM.
+  - Destroying or expiring one session revokes only that instance and leaves other active sessions unaffected.
+- **Memory Dump Protection**:
+  - If an attacker obtains a memory dump of the running Vault Service, they only see AES ciphertexts and SHA-256 hashes. Without the client's session token held on the client device, the vault key cannot be decrypted.
 - **Explicit Vault State (LOCKED / UNLOCKED)**:
-  - The Vault Service manages the state. Unwrapped keys reside exclusively in the Vault Service memory.
-  - **Inactivity Auto-Lock**: Automatically locks after 15–30 minutes of idle time.
-  - **Manual Lock**: Instantly purges active cryptographic sub-keys from RAM, destroys the ephemeral search index, and invalidates active session contexts.
+  - The vault is considered `UNLOCKED` when at least one active, non-expired session exists in memory.
+  - **Inactivity Auto-Lock & Expiry**: Sessions expire after their designated TTL (default 24h) or inactivity period.
+  - **Manual Lock**: Instantly clears all active session records from RAM, resetting the vault to `LOCKED`.
 
 ---
 

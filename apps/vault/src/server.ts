@@ -250,6 +250,8 @@ export function createVaultHttpServer() {
           return;
         }
 
+        const sessionToken = req.headers["x-session-token"] as string;
+
         if (!body.provider || typeof body.provider !== "string" || !body.provider.trim()) {
           sendJson(res, 400, { error: "provider is required and must be a non-empty string." });
           return;
@@ -263,11 +265,14 @@ export function createVaultHttpServer() {
           return;
         }
 
-        const key = await addApiKey({
-          provider: body.provider,
-          name: body.name,
-          apiKey: body.apiKey,
-        });
+        const key = await addApiKey(
+          {
+            provider: body.provider,
+            name: body.name,
+            apiKey: body.apiKey,
+          },
+          sessionToken
+        );
         sendJson<AddApiKeyResponse>(res, 201, { success: true, key });
         return;
       }
@@ -293,12 +298,14 @@ export function createVaultHttpServer() {
           return;
         }
 
+        const sessionToken = req.headers["x-session-token"] as string;
+
         if (!id || !UUID_REGEX.test(id)) {
           sendJson(res, 400, { error: "A valid Key ID (UUID) is required in URL path (/keys/:id)." });
           return;
         }
 
-        await removeApiKey(id);
+        await removeApiKey(id, sessionToken);
         sendJson(res, 200, { success: true });
         return;
       }
@@ -323,6 +330,7 @@ export function createVaultHttpServer() {
           return;
         }
 
+        const sessionToken = req.headers["x-session-token"] as string;
         const limitParam = url.searchParams.get("limit");
         const offsetParam = url.searchParams.get("offset");
 
@@ -334,7 +342,7 @@ export function createVaultHttpServer() {
           return;
         }
 
-        const chats = await listChats(limit, offset);
+        const chats = await listChats(sessionToken, limit, offset);
         sendJson<ListChatsResponse>(res, 200, { success: true, chats });
         return;
       }
@@ -354,6 +362,8 @@ export function createVaultHttpServer() {
           return;
         }
 
+        const sessionToken = req.headers["x-session-token"] as string;
+
         if (!body.message || typeof body.message !== "string" || !body.message.trim()) {
           sendJson(res, 400, { error: "message is required and must be a non-empty string." });
           return;
@@ -365,6 +375,7 @@ export function createVaultHttpServer() {
           provider: body.provider,
           model: body.model,
           thinkingLevel: body.thinkingLevel,
+          sessionToken,
         });
 
         sendJson<SendChatMessageResponse>(res, 200, {
@@ -383,6 +394,7 @@ export function createVaultHttpServer() {
           return;
         }
 
+        const sessionToken = req.headers["x-session-token"] as string;
         const chatId = pathname.replace(/^\/chats\//, "").replace(/\/messages$/, "").trim();
         if (!chatId || !UUID_REGEX.test(chatId)) {
           sendJson(res, 400, { error: "A valid Chat ID (UUID) is required." });
@@ -403,8 +415,8 @@ export function createVaultHttpServer() {
 
         const sort = sortParam === "desc" ? "desc" : "asc";
 
-        const chat = await getChat(chatId);
-        const messages = await getChatMessages(chatId, limit, offset, sort);
+        const chat = await getChat(chatId, sessionToken);
+        const messages = await getChatMessages(chatId, sessionToken, limit, offset, sort);
         sendJson<GetChatMessagesResponse>(res, 200, { success: true, chat, messages });
         return;
       }
@@ -416,13 +428,14 @@ export function createVaultHttpServer() {
           return;
         }
 
+        const sessionToken = req.headers["x-session-token"] as string;
         const chatId = pathname.replace(/^\/chats\//, "").trim();
         if (!chatId || !UUID_REGEX.test(chatId)) {
           sendJson(res, 400, { error: "A valid Chat ID (UUID) is required." });
           return;
         }
 
-        await removeChat(chatId);
+        await removeChat(chatId, sessionToken);
         sendJson(res, 200, { success: true });
         return;
       }

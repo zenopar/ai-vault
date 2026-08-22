@@ -3,7 +3,8 @@ import { createVaultHttpServer } from "../src/server.js";
 import { config } from "../src/config.js";
 import { vaultState } from "../src/vault/state.js";
 import { initVault } from "../src/vault/init.js";
-import { getDecryptedApiKey } from "../src/vault/keys.js";
+import { unlockVault } from "../src/vault/unlock.js";
+import { getDecryptedApiKey, addApiKey } from "../src/vault/keys.js";
 import { createInMemoryPrismaMock } from "./helpers/mockDb.js";
 import request from "supertest";
 
@@ -113,14 +114,11 @@ describe("AI API Keys API (Unit Tests / In-Memory Mock DB)", () => {
     expect(listRes.body.keys[0].models).toBeDefined();
     expect(listRes.body.keys[0].models.some((m: any) => m.name === "gpt-5.6-sol")).toBe(true);
 
-
-
-    // 5. Decrypt key internally (for use by Vault Service when calling AI providers)
-    const decryptedKey = await getDecryptedApiKey(keyId);
+    // 5. Decrypt key internally with session token
+    const decryptedKey = await getDecryptedApiKey(keyId, sessionToken);
     expect(decryptedKey).toBe(rawApiKey);
 
     // 6. Verify that tampering with DB records (AAD mismatch or corrupted ciphertext/tag) fails decryption
-    // Create a second record with swapped ciphertext
     await prisma.ai_api_keys.create({
       data: {
         id: "11111111-2222-3333-4444-555555555555",
@@ -134,7 +132,7 @@ describe("AI API Keys API (Unit Tests / In-Memory Mock DB)", () => {
     });
 
     // Decrypting swapped-id with same ciphertext should fail because AAD binds to record ID
-    await expect(getDecryptedApiKey("11111111-2222-3333-4444-555555555555")).rejects.toThrow();
+    await expect(getDecryptedApiKey("11111111-2222-3333-4444-555555555555", sessionToken)).rejects.toThrow();
 
     // Clean up the swapped test record immediately
     await prisma.ai_api_keys.delete({ where: { id: "11111111-2222-3333-4444-555555555555" } });
@@ -150,5 +148,52 @@ describe("AI API Keys API (Unit Tests / In-Memory Mock DB)", () => {
     const deletedRecord = await prisma.ai_api_keys.findUnique({ where: { id: keyId } });
     expect(deletedRecord).toBeNull();
   });
-});
 
+  it("should support multiple concurrent session tokens, each encrypting the vault key with its own token", async () => {
+    // 1. Initialize vault and get sessionToken1
+    const initResult = await initVault("MultiSessionPassword123!");
+    const sessionToken1 = initResult.sessionToken!;
+    expect(vaultState.getSessionCount()).toBe(1);
+
+    // 2. Unlock vault a second time to get sessionToken2
+    const unlockResult = await unlockVault("MultiSessionPassword123!");
+    const sessionToken2 = unlockResult.sessionToken!;
+    expect(sessionToken1).not.toBe(sessionToken2);
+    expect(vaultState.getSessionCount()).toBe(2);
+
+    // 3. Add an API key using sessionToken1
+    const key = await addApiKey({
+      provider: "google",
+      name: "Gemini Key",
+      apiKey: "AIzaSyTest12345",
+    }, sessionToken1);
+
+    // 4. Decrypt using sessionToken2 (both have independent copies of vaultKey encrypted with their token)
+    const decryptedWithToken2 = await getDecryptedApiKey(key.id, sessionToken2);
+    expect(decryptedWithToken2).toBe("AIzaSyTest12345");
+
+    // 5. Decrypt using sessionToken1
+    const decryptedWithToken1 = await getDecryptedApiKey(key.id, sessionToken1);
+    expect(decryptedWithToken1).toBe("AIzaSyTest12345");
+
+    // 6. Destroy session 1 (log out session 1)
+    vaultState.destroySession(sessionToken1);
+    expect(vaultState.getSessionCount()).toBe(1);
+    expect(vaultState.isUnlocked()).toBe(true);
+
+    // session 1 should now fail
+    await expect(getDecryptedApiKey(key.id, sessionToken1)).rejects.toThrow("Vault is locked or session does not exist.");
+
+    // session 2 should still succeed
+    const decryptedAfterSession1Destroyed = await getDecryptedApiKey(key.id, sessionToken2);
+    expect(decryptedAfterSession1Destroyed).toBe("AIzaSyTest12345");
+
+    // 7. Destroy session 2
+    vaultState.destroySession(sessionToken2);
+    expect(vaultState.getSessionCount()).toBe(0);
+    expect(vaultState.isUnlocked()).toBe(false);
+
+    // session 2 now fails
+    await expect(getDecryptedApiKey(key.id, sessionToken2)).rejects.toThrow("Vault is locked or session does not exist.");
+  });
+});

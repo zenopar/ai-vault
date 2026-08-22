@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { vaultState } from "./state.js";
-import { encryptBuffer, decryptBuffer } from "./crypto.js";
+import { vaultState, VaultLockedError } from "./state.js";
+import { encryptBuffer, decryptBuffer, type EncryptedData } from "./crypto.js";
 import { 
   createApiKeyRecord, 
   getAllApiKeys, 
@@ -12,12 +12,7 @@ import { AiApiKeyMetadata } from "@ai-vault/types";
 
 import { listModels } from "./models.js";
 
-export class VaultLockedError extends Error {
-  constructor(message = "Vault is locked. Unlock the vault first.") {
-    super(message);
-    this.name = "VaultLockedError";
-  }
-}
+export { VaultLockedError };
 
 export class ApiKeyNotFoundError extends Error {
   constructor(message = "API key not found.") {
@@ -35,27 +30,28 @@ export function buildFieldAad(recordType: string, recordId: string, fieldName: s
 }
 
 /**
- * Encrypts an AI API key using the in-memory HKDF secrets key and stores it in the database with AAD binding.
+ * Encrypts an AI API key using the transient HKDF secrets key and stores it in the database with AAD binding.
  */
-export async function addApiKey(params: {
-  provider: string;
-  name: string;
-  apiKey: string;
-}): Promise<AiApiKeyMetadata> {
-  if (!vaultState.isUnlocked()) {
-    throw new VaultLockedError();
-  }
-
-  const secretsKey = vaultState.getSecretsKey();
-  if (!secretsKey) {
-    throw new VaultLockedError("Secrets key is unavailable in memory.");
-  }
-
+export async function addApiKey(
+  params: {
+    provider: string;
+    name: string;
+    apiKey: string;
+  },
+  sessionToken: string
+): Promise<AiApiKeyMetadata> {
   const recordId = randomUUID();
   const aad = buildFieldAad("ai_api_key", recordId, "apiKey", 1);
-
   const plaintextBuffer = Buffer.from(params.apiKey.trim(), "utf-8");
-  const encrypted = encryptBuffer(plaintextBuffer, secretsKey, aad);
+
+  let encrypted: EncryptedData;
+  try {
+    encrypted = await vaultState.withSecretsKey(sessionToken, (secretsKey) => {
+      return encryptBuffer(plaintextBuffer, secretsKey, aad);
+    });
+  } finally {
+    plaintextBuffer.fill(0);
+  }
 
   const record = await createApiKeyRecord({
     id: recordId,
@@ -65,8 +61,6 @@ export async function addApiKey(params: {
     iv: encrypted.iv,
     tag: encrypted.tag,
   });
-
-  vaultState.touch();
 
   const models = await listModels(record.provider);
 
@@ -99,20 +93,10 @@ export async function listApiKeys(): Promise<AiApiKeyMetadata[]> {
   }));
 }
 
-
 /**
- * Decrypts an AI API key using the in-memory HKDF secrets key and verifies AAD integrity.
+ * Decrypts an AI API key using the transient HKDF secrets key and verifies AAD integrity.
  */
-export async function getDecryptedApiKey(id: string): Promise<string> {
-  if (!vaultState.isUnlocked()) {
-    throw new VaultLockedError();
-  }
-
-  const secretsKey = vaultState.getSecretsKey();
-  if (!secretsKey) {
-    throw new VaultLockedError("Secrets key is unavailable in memory.");
-  }
-
+export async function getDecryptedApiKey(id: string, sessionToken: string): Promise<string> {
   const record = await getApiKeyRecordById(id);
   if (!record) {
     throw new ApiKeyNotFoundError();
@@ -120,25 +104,32 @@ export async function getDecryptedApiKey(id: string): Promise<string> {
 
   const aad = buildFieldAad("ai_api_key", record.id, "apiKey", 1);
 
-  const decryptedBuffer = decryptBuffer(
-    {
-      ciphertext: record.encrypted_key,
-      iv: record.iv,
-      tag: record.tag,
-    },
-    secretsKey,
-    aad
-  );
+  const decryptedBuffer = await vaultState.withSecretsKey(sessionToken, (secretsKey) => {
+    return decryptBuffer(
+      {
+        ciphertext: record.encrypted_key,
+        iv: record.iv,
+        tag: record.tag,
+      },
+      secretsKey,
+      aad
+    );
+  });
 
-  vaultState.touch();
-
-  return decryptedBuffer.toString("utf-8");
+  try {
+    return decryptedBuffer.toString("utf-8");
+  } finally {
+    decryptedBuffer.fill(0);
+  }
 }
 
 /**
  * Deletes an AI API key record from the database.
  */
-export async function removeApiKey(id: string): Promise<boolean> {
+export async function removeApiKey(id: string, sessionToken?: string): Promise<boolean> {
+  if (sessionToken && !vaultState.verifySession(sessionToken)) {
+    throw new VaultLockedError();
+  }
   if (!vaultState.isUnlocked()) {
     throw new VaultLockedError();
   }

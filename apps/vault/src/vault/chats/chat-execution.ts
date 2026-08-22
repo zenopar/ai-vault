@@ -9,7 +9,6 @@ import { executeAiCompletion, type ChatMessagePrompt } from "../ai/ai-provider.j
 import type { ChatMetadata, ChatMessageDto } from "@ai-vault/types";
 
 import {
-  requireDbKey,
   decryptChatTitle,
   decryptChatFields,
   deriveTitleFromPrompt,
@@ -24,6 +23,7 @@ export interface SendMessageParams {
   provider?: string;
   model?: string;
   thinkingLevel?: "low" | "medium" | "high" | "none";
+  sessionToken: string;
 }
 
 export interface SendMessageResult {
@@ -34,7 +34,7 @@ export interface SendMessageResult {
 
 const activeChatLocks = new Set<string>();
 
-// === 4. AI EXECUTION PIPELINE ===
+// === AI EXECUTION PIPELINE ===
 
 async function calculateDynamicTokens(provider: string, model: string): Promise<{ maxTokens: number; maxOutputTokens?: number; inputPrice?: number; outputPrice?: number; modelId?: string }> {
   let maxTokens = 6000;
@@ -111,8 +111,6 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
     throw new Error("AI is already processing a message in this chat. Please wait.");
   }
 
-  const dbKey = requireDbKey();
-
   const trimmedMessage = params.message.trim();
   if (!trimmedMessage) {
     throw new Error("Message content cannot be empty.");
@@ -125,23 +123,29 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
     if (!chatRecord || chatRecord.status !== "ACTIVE") {
       throw new ChatNotFoundError();
     }
-    const title = decryptChatTitle(chatRecord, dbKey, false);
-    const fields = decryptChatFields(chatRecord, dbKey);
-    chat = {
-      id: chatRecord.id,
-      title,
-      status: chatRecord.status,
-      metadata: fields.metadata,
-      inputTokens: fields.inputTokens,
-      outputTokens: fields.outputTokens,
-      createdAt: chatRecord.created_at.toISOString(),
-      updatedAt: chatRecord.updated_at.toISOString(),
-    };
-  } else {
-    chat = await createChat({
-      title: deriveTitleFromPrompt(trimmedMessage),
-      metadata: { provider: params.provider || null, model: params.model || null },
+
+    chat = await vaultState.withDbKey(params.sessionToken, (dbKey) => {
+      const title = decryptChatTitle(chatRecord, dbKey, false);
+      const fields = decryptChatFields(chatRecord, dbKey);
+      return {
+        id: chatRecord.id,
+        title,
+        status: chatRecord.status,
+        metadata: fields.metadata,
+        inputTokens: fields.inputTokens,
+        outputTokens: fields.outputTokens,
+        createdAt: chatRecord.created_at.toISOString(),
+        updatedAt: chatRecord.updated_at.toISOString(),
+      };
     });
+  } else {
+    chat = await createChat(
+      {
+        title: deriveTitleFromPrompt(trimmedMessage),
+        metadata: { provider: params.provider || null, model: params.model || null },
+      },
+      params.sessionToken
+    );
   }
 
   if (activeChatLocks.has(chat.id)) {
@@ -156,13 +160,16 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
     const { maxTokens, maxOutputTokens, inputPrice, outputPrice, modelId } = await calculateDynamicTokens(activeProvider, activeModel);
     
     // 1. Build context
-    const existingMessages = await getChatMessages(chat.id, 100, 0, "desc");
+    const existingMessages = await getChatMessages(chat.id, params.sessionToken, 100, 0, "desc");
     const promptContext = buildPromptContext(existingMessages, trimmedMessage, maxTokens);
 
     // 2. Encrypt and store user message
     const userMsgId = randomUUID();
     const userAad = buildFieldAad("message", userMsgId, "content", 1);
-    const encUserContent = encryptBuffer(Buffer.from(trimmedMessage, "utf-8"), dbKey, userAad);
+    
+    const encUserContent = await vaultState.withDbKey(params.sessionToken, (dbKey) => {
+      return encryptBuffer(Buffer.from(trimmedMessage, "utf-8"), dbKey, userAad);
+    });
 
     const { record: userRecord, latestSeq } = await createMessageWithSequence({
       id: userMsgId,
@@ -192,12 +199,12 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
       model: params.model,
       thinkingLevel: params.thinkingLevel,
       maxOutputTokens,
+      sessionToken: params.sessionToken,
     });
 
     // 4. Encrypt and store assistant message
     const assistantMsgId = randomUUID();
     const assistantAad = buildFieldAad("message", assistantMsgId, "content", 1);
-    const encAssistantContent = encryptBuffer(Buffer.from(aiResult.content, "utf-8"), dbKey, assistantAad);
 
     let messageInputCost: number | undefined = undefined;
     let messageOutputCost: number | undefined = undefined;
@@ -215,77 +222,6 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
         messageInputCost = (inT / 1000000 * inP);
         messageOutputCost = (outT / 1000000 * outP);
         messageTotalCost = messageInputCost + messageOutputCost;
-      }
-
-      // Update Chat Tokens and Cost
-      const chatRecord = await getChatRecordById(chat.id);
-      if (chatRecord) {
-        const fields = decryptChatFields(chatRecord, dbKey);
-        const chatInputTokens = (fields.inputTokens || 0) + inT;
-        const chatOutputTokens = (fields.outputTokens || 0) + outT;
-        const chatInputCost = (fields.inputCost || 0) + (messageInputCost ?? 0);
-        const chatOutputCost = (fields.outputCost || 0) + (messageOutputCost ?? 0);
-        const chatTotalCost = chatInputCost + chatOutputCost;
-        const chatThoughtTokens = (fields.thoughtTokens || 0) + (aiResult.thoughtTokens || 0);
-
-        chat.inputTokens = chatInputTokens;
-        chat.outputTokens = chatOutputTokens;
-        chat.thoughtTokens = chatThoughtTokens;
-        chat.inputCost = chatInputCost;
-        chat.outputCost = chatOutputCost;
-        chat.totalCost = chatTotalCost;
-
-        const inAad = buildFieldAad("chat", chat.id, "input_tokens", chatRecord.encryption_version);
-        const encIn = encryptBuffer(Buffer.from(chatInputTokens.toString(), "utf-8"), dbKey, inAad);
-
-        const outAad = buildFieldAad("chat", chat.id, "output_tokens", chatRecord.encryption_version);
-        const encOut = encryptBuffer(Buffer.from(chatOutputTokens.toString(), "utf-8"), dbKey, outAad);
-
-        let encChatThought, chatThoughtIv, chatThoughtTag;
-        if (chatThoughtTokens > 0) {
-          const thoughtAad = buildFieldAad("chat", chat.id, "thought_tokens", chatRecord.encryption_version);
-          const eThought = encryptBuffer(Buffer.from(chatThoughtTokens.toString(), "utf-8"), dbKey, thoughtAad);
-          encChatThought = eThought.ciphertext; chatThoughtIv = eThought.iv; chatThoughtTag = eThought.tag;
-        }
-
-        let encInCost, inCostIv, inCostTag;
-        let encOutCost, outCostIv, outCostTag;
-        let encTotCost, totCostIv, totCostTag;
-
-        if (inputPrice !== undefined || outputPrice !== undefined) {
-          const inCostAad = buildFieldAad("chat", chat.id, "input_cost", chatRecord.encryption_version);
-          const eInC = encryptBuffer(Buffer.from(chatInputCost.toString(), "utf-8"), dbKey, inCostAad);
-          encInCost = eInC.ciphertext; inCostIv = eInC.iv; inCostTag = eInC.tag;
-
-          const outCostAad = buildFieldAad("chat", chat.id, "output_cost", chatRecord.encryption_version);
-          const eOutC = encryptBuffer(Buffer.from(chatOutputCost.toString(), "utf-8"), dbKey, outCostAad);
-          encOutCost = eOutC.ciphertext; outCostIv = eOutC.iv; outCostTag = eOutC.tag;
-
-          const totCostAad = buildFieldAad("chat", chat.id, "total_cost", chatRecord.encryption_version);
-          const eTotC = encryptBuffer(Buffer.from(chatTotalCost.toString(), "utf-8"), dbKey, totCostAad);
-          encTotCost = eTotC.ciphertext; totCostIv = eTotC.iv; totCostTag = eTotC.tag;
-        }
-
-        await updateChatRecord(chat.id, {
-          encrypted_input_tokens: encIn.ciphertext,
-          input_tokens_iv: encIn.iv,
-          input_tokens_tag: encIn.tag,
-          encrypted_output_tokens: encOut.ciphertext,
-          output_tokens_iv: encOut.iv,
-          output_tokens_tag: encOut.tag,
-          encrypted_thought_tokens: encChatThought,
-          thought_tokens_iv: chatThoughtIv,
-          thought_tokens_tag: chatThoughtTag,
-          encrypted_input_cost: encInCost,
-          input_cost_iv: inCostIv,
-          input_cost_tag: inCostTag,
-          encrypted_output_cost: encOutCost,
-          output_cost_iv: outCostIv,
-          output_cost_tag: outCostTag,
-          encrypted_total_cost: encTotCost,
-          total_cost_iv: totCostIv,
-          total_cost_tag: totCostTag,
-        });
       }
     }
 
@@ -305,7 +241,90 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
     };
 
     const metadataAad = buildFieldAad("message", assistantMsgId, "metadata", 1);
-    const encMetadata = encryptBuffer(Buffer.from(JSON.stringify(metadataObj), "utf-8"), dbKey, metadataAad);
+
+    const { encAssistantContent, encMetadata } = await vaultState.withDbKey(params.sessionToken, (dbKey) => {
+      const encAssContent = encryptBuffer(Buffer.from(aiResult.content, "utf-8"), dbKey, assistantAad);
+      const encMeta = encryptBuffer(Buffer.from(JSON.stringify(metadataObj), "utf-8"), dbKey, metadataAad);
+      return {
+        encAssistantContent: encAssContent,
+        encMetadata: encMeta,
+      };
+    });
+
+    // Update Chat Tokens and Cost if needed
+    if (aiResult.inputTokens !== undefined || aiResult.outputTokens !== undefined) {
+      const chatRecord = await getChatRecordById(chat.id);
+      if (chatRecord) {
+        await vaultState.withDbKey(params.sessionToken, async (dbKey) => {
+          const fields = decryptChatFields(chatRecord, dbKey);
+          const chatInputTokens = (fields.inputTokens || 0) + inT;
+          const chatOutputTokens = (fields.outputTokens || 0) + outT;
+          const chatInputCost = (fields.inputCost || 0) + (messageInputCost ?? 0);
+          const chatOutputCost = (fields.outputCost || 0) + (messageOutputCost ?? 0);
+          const chatTotalCost = chatInputCost + chatOutputCost;
+          const chatThoughtTokens = (fields.thoughtTokens || 0) + (aiResult.thoughtTokens || 0);
+
+          chat.inputTokens = chatInputTokens;
+          chat.outputTokens = chatOutputTokens;
+          chat.thoughtTokens = chatThoughtTokens;
+          chat.inputCost = chatInputCost;
+          chat.outputCost = chatOutputCost;
+          chat.totalCost = chatTotalCost;
+
+          const inAad = buildFieldAad("chat", chat.id, "input_tokens", chatRecord.encryption_version);
+          const encIn = encryptBuffer(Buffer.from(chatInputTokens.toString(), "utf-8"), dbKey, inAad);
+
+          const outAad = buildFieldAad("chat", chat.id, "output_tokens", chatRecord.encryption_version);
+          const encOut = encryptBuffer(Buffer.from(chatOutputTokens.toString(), "utf-8"), dbKey, outAad);
+
+          let encChatThought, chatThoughtIv, chatThoughtTag;
+          if (chatThoughtTokens > 0) {
+            const thoughtAad = buildFieldAad("chat", chat.id, "thought_tokens", chatRecord.encryption_version);
+            const eThought = encryptBuffer(Buffer.from(chatThoughtTokens.toString(), "utf-8"), dbKey, thoughtAad);
+            encChatThought = eThought.ciphertext; chatThoughtIv = eThought.iv; chatThoughtTag = eThought.tag;
+          }
+
+          let encInCost, inCostIv, inCostTag;
+          let encOutCost, outCostIv, outCostTag;
+          let encTotCost, totCostIv, totCostTag;
+
+          if (inputPrice !== undefined || outputPrice !== undefined) {
+            const inCostAad = buildFieldAad("chat", chat.id, "input_cost", chatRecord.encryption_version);
+            const eInC = encryptBuffer(Buffer.from(chatInputCost.toString(), "utf-8"), dbKey, inCostAad);
+            encInCost = eInC.ciphertext; inCostIv = eInC.iv; inCostTag = eInC.tag;
+
+            const outCostAad = buildFieldAad("chat", chat.id, "output_cost", chatRecord.encryption_version);
+            const eOutC = encryptBuffer(Buffer.from(chatOutputCost.toString(), "utf-8"), dbKey, outCostAad);
+            encOutCost = eOutC.ciphertext; outCostIv = eOutC.iv; outCostTag = eOutC.tag;
+
+            const totCostAad = buildFieldAad("chat", chat.id, "total_cost", chatRecord.encryption_version);
+            const eTotC = encryptBuffer(Buffer.from(chatTotalCost.toString(), "utf-8"), dbKey, totCostAad);
+            encTotCost = eTotC.ciphertext; totCostIv = eTotC.iv; totCostTag = eTotC.tag;
+          }
+
+          await updateChatRecord(chat.id, {
+            encrypted_input_tokens: encIn.ciphertext,
+            input_tokens_iv: encIn.iv,
+            input_tokens_tag: encIn.tag,
+            encrypted_output_tokens: encOut.ciphertext,
+            output_tokens_iv: encOut.iv,
+            output_tokens_tag: encOut.tag,
+            encrypted_thought_tokens: encChatThought,
+            thought_tokens_iv: chatThoughtIv,
+            thought_tokens_tag: chatThoughtTag,
+            encrypted_input_cost: encInCost,
+            input_cost_iv: inCostIv,
+            input_cost_tag: inCostTag,
+            encrypted_output_cost: encOutCost,
+            output_cost_iv: outCostIv,
+            output_cost_tag: outCostTag,
+            encrypted_total_cost: encTotCost,
+            total_cost_iv: totCostIv,
+            total_cost_tag: totCostTag,
+          });
+        });
+      }
+    }
 
     const assistantRecord = await createMessageRecord({
       id: assistantMsgId,
@@ -339,8 +358,6 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
       createdAt: assistantRecord.created_at.toISOString(),
       updatedAt: assistantRecord.updated_at.toISOString(),
     };
-
-    vaultState.touch();
 
     return {
       chat,

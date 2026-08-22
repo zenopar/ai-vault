@@ -8,10 +8,12 @@ describe("Chats Service (Unit Tests / In-Memory Mock DB)", () => {
   const dbMock = createInMemoryPrismaMock();
   const prisma = dbMock.mockPrisma;
 
-  async function getDecryptedChatTitle(chatId: string) {
+  async function getDecryptedChatTitle(chatId: string, sessionToken: string) {
     const record = await prisma.chats.findUnique({ where: { id: chatId } });
     if (!record) throw new Error("Not found");
-    return decryptChatTitle(record, vaultState.getDbKey()!, false);
+    return await vaultState.withDbKey(sessionToken, (dbKey) => {
+      return decryptChatTitle(record, dbKey, false);
+    });
   }
 
   beforeEach(() => {
@@ -26,15 +28,16 @@ describe("Chats Service (Unit Tests / In-Memory Mock DB)", () => {
   });
 
   it("should throw error when vault is locked", async () => {
-    await expect(createChat({ title: "My New Chat" })).rejects.toThrow("Vault is locked");
+    await expect(createChat({ title: "My New Chat" }, "invalid-token")).rejects.toThrow("Vault is locked");
   });
 
   it("should successfully encrypt and store chat with default title", async () => {
     // 1. Initialize vault
-    await initVault("SecureMasterPassword123!");
+    const initResult = await initVault("SecureMasterPassword123!");
+    const sessionToken = initResult.sessionToken!;
 
     // 2. Create chat without title (should default to "New Chat")
-    const chat = await createChat({});
+    const chat = await createChat({}, sessionToken);
 
     expect(chat).toBeDefined();
     expect(chat.id).toBeDefined();
@@ -53,20 +56,24 @@ describe("Chats Service (Unit Tests / In-Memory Mock DB)", () => {
     expect(dbRecord?.title_tag).toBeDefined();
 
     // 4. Verify decryption with AAD
-    const decryptedTitle = await getDecryptedChatTitle(chatId);
+    const decryptedTitle = await getDecryptedChatTitle(chatId, sessionToken);
     expect(decryptedTitle).toBe("New Chat");
   });
 
   it("should successfully encrypt and store chat with custom title and metadata", async () => {
-    await initVault("SecureMasterPassword123!");
+    const initResult = await initVault("SecureMasterPassword123!");
+    const sessionToken = initResult.sessionToken!;
 
     const customTitle = "Project Security Architecture Discussion";
     const customMetadata = { tags: ["security", "architecture"], model: "gemini-3.7-flash" };
 
-    const chat = await createChat({
-      title: customTitle,
-      metadata: customMetadata,
-    });
+    const chat = await createChat(
+      {
+        title: customTitle,
+        metadata: customMetadata,
+      },
+      sessionToken
+    );
 
     expect(chat.id).toBeDefined();
     expect(chat.title).toBe(customTitle);
@@ -83,7 +90,7 @@ describe("Chats Service (Unit Tests / In-Memory Mock DB)", () => {
     expect(dbRecord?.metadata_tag).toBeDefined();
 
     // Decrypt title and verify
-    const decryptedTitle = await getDecryptedChatTitle(chatId);
+    const decryptedTitle = await getDecryptedChatTitle(chatId, sessionToken);
     expect(decryptedTitle).toBe(customTitle);
 
     // Tampering test: create a swapped record with mismatched ID
@@ -99,6 +106,6 @@ describe("Chats Service (Unit Tests / In-Memory Mock DB)", () => {
     });
 
     // Decryption of swapped ID must fail because AAD binds to record ID
-    await expect(getDecryptedChatTitle("22222222-3333-4444-5555-666666666666")).rejects.toThrow();
+    await expect(getDecryptedChatTitle("22222222-3333-4444-5555-666666666666", sessionToken)).rejects.toThrow();
   });
 });
