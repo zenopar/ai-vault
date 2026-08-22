@@ -4,6 +4,9 @@ export interface VaultStatusResponse {
   status: VaultOverallStatus;
   isUnlocked: boolean;
   version?: number;
+  unlockedAt?: string | null;
+  lastActivityAt?: string | null;
+  inactivityTimeoutMs?: number;
   error?: string;
 }
 
