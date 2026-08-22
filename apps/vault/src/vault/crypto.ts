@@ -75,13 +75,13 @@ export const AAD_WRAPPED_VAULT_KEY_SESSION = Buffer.from("ai-vault/wrapped-vault
 
 /**
  * Converts a 32-byte hex session token directly into a 32-byte AES-256 buffer key.
+ * Requires strictly 64 hex characters (256-bit entropy).
  */
 export function sessionTokenToKey(sessionToken: string): Buffer {
-  // If 64 hex characters (32 bytes), parse hex directly; otherwise derive 32-byte SHA-256 digest
-  if (/^[0-9a-fA-F]{64}$/.test(sessionToken)) {
-    return Buffer.from(sessionToken, "hex");
+  if (typeof sessionToken !== "string" || sessionToken.length !== 64 || !/^[0-9a-fA-F]{64}$/.test(sessionToken)) {
+    throw new Error("Invalid session token format. Expected a 64-character hex string (32 bytes).");
   }
-  return crypto.createHash("sha256").update(sessionToken).digest();
+  return Buffer.from(sessionToken, "hex");
 }
 
 /**

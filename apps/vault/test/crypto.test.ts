@@ -85,18 +85,18 @@ describe("Crypto Module Unit Tests (Pure In-Memory)", () => {
     expect(() => decryptBuffer(encrypted, key, aadTampered)).toThrow();
   });
 
-  it("should convert 32-byte hex session token directly to 32-byte AES key buffer", () => {
-    const raw32BytesHex = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-    const key = sessionTokenToKey(raw32BytesHex);
+  it("should convert 32-byte hex session token directly to 32-byte AES key buffer and reject invalid tokens", () => {
+    const valid64HexToken = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    const key = sessionTokenToKey(valid64HexToken);
 
     expect(key).toBeInstanceOf(Buffer);
     expect(key.length).toBe(32);
-    expect(key.toString("hex")).toBe(raw32BytesHex);
+    expect(key.toString("hex")).toBe(valid64HexToken);
 
-    // Also support arbitrary string tokens by hashing to 32 bytes
-    const strToken = "my-custom-test-session-token";
-    const key2 = sessionTokenToKey(strToken);
-    expect(key2).toBeInstanceOf(Buffer);
-    expect(key2.length).toBe(32);
+    // Reject non-64 hex strings
+    expect(() => sessionTokenToKey("short-token")).toThrow("Invalid session token format");
+    expect(() => sessionTokenToKey("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdeg")).toThrow("Invalid session token format");
+    expect(() => sessionTokenToKey("")).toThrow("Invalid session token format");
+    expect(() => sessionTokenToKey(null as any)).toThrow("Invalid session token format");
   });
 });
