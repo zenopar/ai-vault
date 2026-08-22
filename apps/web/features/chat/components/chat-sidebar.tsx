@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ChatMetadata, AiApiKeyMetadata } from "@ai-vault/types";
 import { Button, Badge } from "@/shared/components";
 import { lockVaultAction } from "@/features/vault/actions/lock-vault.action";
+import { BarChart2, Key } from "lucide-react";
 
 interface ChatSidebarProps {
   isOpen: boolean;
@@ -56,9 +57,8 @@ export function ChatSidebar({
 
       {/* Sidebar panel */}
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 w-56 bg-[#0e0f12] border-r border-white/[0.06] flex flex-col transition-transform duration-150 md:translate-x-0 font-mono ${
-          isOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed top-0 bottom-0 left-0 z-50 w-56 bg-[#0e0f12] border-r border-white/[0.06] flex flex-col transition-transform duration-150 md:translate-x-0 font-mono ${isOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
       >
         {/* Top Action */}
         <div className="p-2.5 flex items-center gap-2 border-b border-white/[0.04]">
@@ -95,11 +95,10 @@ export function ChatSidebar({
                 <div
                   key={c.id}
                   onClick={() => onSelectChat(c.id)}
-                  className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${
-                    isActive
+                  className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${isActive
                       ? "bg-white/[0.08] text-white font-medium"
                       : "text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.03]"
-                  }`}
+                    }`}
                 >
                   <span className="truncate pr-2">{c.title || "untitled"}</span>
                   <Button
@@ -158,10 +157,24 @@ export function ChatSidebar({
         {/* Bottom Actions */}
         <div className="p-3 border-t border-white/[0.04] space-y-1">
           <Link
+            href="/analytics"
+            className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-neutral-400 hover:text-white hover:bg-white/[0.04] transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <BarChart2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span>analytics</span>
+            </div>
+            <span className="text-[10px] text-neutral-500 font-mono">stats</span>
+          </Link>
+
+          <Link
             href="/keys"
             className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-neutral-400 hover:text-white hover:bg-white/[0.04] transition-colors"
           >
-            <span>keys</span>
+            <div className="flex items-center gap-2">
+              <Key className="w-3.5 h-3.5 text-neutral-500" />
+              <span>keys</span>
+            </div>
             <Badge variant="mono" className="text-[10px] px-1.5 py-0.5">
               {keys.length}
             </Badge>
