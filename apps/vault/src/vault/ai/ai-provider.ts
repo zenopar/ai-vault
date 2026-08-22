@@ -13,6 +13,7 @@ export interface AiExecutionParams {
   maxOutputTokens?: number;
   thinkingLevel?: "low" | "medium" | "high" | "none";
   sessionToken: string;
+  systemPrompt?: string;
 }
 
 export interface AiExecutionResult {
@@ -42,13 +43,14 @@ export class UnsupportedProviderError extends Error {
   }
 }
 
-const BASE_SYSTEM_PROMPT = "Be a friendly but 100% honest assistant. Truth is paramount regardless of emotions. Keep responses as concise as possible while remaining fully meaningful.";
+const FALLBACK_SYSTEM_PROMPT = "Be a friendly but 100% honest assistant. Truth is paramount regardless of emotions. Keep responses as concise as possible while remaining fully meaningful.";
 
-function mergeSystemPrompt(messages: ChatMessagePrompt[]): ChatMessagePrompt[] {
+function mergeSystemPrompt(messages: ChatMessagePrompt[], globalSystemPrompt?: string): ChatMessagePrompt[] {
   const existingSystemMsg = messages.find((m) => m.role === "system")?.content || "";
+  const basePrompt = globalSystemPrompt || FALLBACK_SYSTEM_PROMPT;
   const finalSystemInstructionText = existingSystemMsg
-    ? `${existingSystemMsg}\n\n${BASE_SYSTEM_PROMPT}`
-    : BASE_SYSTEM_PROMPT;
+    ? `${existingSystemMsg}\n\n${basePrompt}`
+    : basePrompt;
 
   return [
     { role: "system", content: finalSystemInstructionText },
@@ -79,7 +81,7 @@ export async function executeAiCompletion(params: AiExecutionParams): Promise<Ai
   let thinkingLevel: string = params.thinkingLevel !== undefined ? params.thinkingLevel : (provider === "google" ? "medium" : "none");
   let result: { text: string; inputTokens?: number; outputTokens?: number; thoughtTokens?: number; thinkingLevel?: string };
 
-  const mergedMessages = mergeSystemPrompt(params.messages);
+  const mergedMessages = mergeSystemPrompt(params.messages, params.systemPrompt);
 
   if (provider === "google") {
     model = model || "gemini-3.7-flash";

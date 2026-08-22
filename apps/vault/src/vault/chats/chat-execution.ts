@@ -5,6 +5,7 @@ import { buildFieldAad } from "../keys.js";
 import { getChatRecordById, updateChatRecord } from "../../db/repository/chats.repository.js";
 import { createMessageWithSequence, createMessageRecord } from "../../db/repository/messages.repository.js";
 import { getAllModels } from "../../db/repository/models.repository.js";
+import { getSettings } from "../settings.js";
 import { executeAiCompletion, type ChatMessagePrompt } from "../ai/ai-provider.js";
 import type { ChatMetadata, ChatMessageDto } from "@ai-vault/types";
 
@@ -36,7 +37,7 @@ const activeChatLocks = new Set<string>();
 
 // === AI EXECUTION PIPELINE ===
 
-async function calculateDynamicTokens(provider: string, model: string): Promise<{ maxTokens: number; maxOutputTokens?: number; inputPrice?: number; outputPrice?: number; modelId?: string }> {
+async function calculateDynamicTokens(provider: string, model: string, tokenTiers: { max_cost: number; tokens: number }[]): Promise<{ maxTokens: number; maxOutputTokens?: number; inputPrice?: number; outputPrice?: number; modelId?: string }> {
   let maxTokens = 6000;
   let maxOutputTokens: number | undefined = undefined;
   let inputPrice: number | undefined = undefined;
@@ -64,10 +65,14 @@ async function calculateDynamicTokens(provider: string, model: string): Promise<
       }
 
       if (outputCost !== null) {
-        if (outputCost <= 0.50) maxOutputTokens = 4000;
-        else if (outputCost <= 2.50) maxOutputTokens = 2500;
-        else if (outputCost <= 10.00) maxOutputTokens = 1500;
-        else maxOutputTokens = 800;
+        const sortedTiers = [...tokenTiers].sort((a, b) => a.max_cost - b.max_cost);
+        for (const tier of sortedTiers) {
+           if (outputCost <= tier.max_cost) {
+             maxOutputTokens = tier.tokens;
+             break;
+           }
+        }
+        if (!maxOutputTokens) maxOutputTokens = 800;
       }
 
       maxTokens = Math.min(maxTokens, contextLimit);
@@ -157,11 +162,24 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
     const activeProvider = params.provider || chat.metadata?.provider || "google";
     const activeModel = params.model || chat.metadata?.model || "gemini-3.7-flash";
 
-    const { maxTokens, maxOutputTokens, inputPrice, outputPrice, modelId } = await calculateDynamicTokens(activeProvider, activeModel);
+    const settings = await getSettings(params.sessionToken);
+    const { maxTokens, maxOutputTokens, inputPrice, outputPrice, modelId } = await calculateDynamicTokens(activeProvider, activeModel, settings.tokenTiers);
     
     // 1. Build context
     const existingMessages = await getChatMessages(chat.id, params.sessionToken, 100, 0, "desc");
     const promptContext = buildPromptContext(existingMessages, trimmedMessage, maxTokens);
+
+    // 1.5 Enforce Max Cost
+    if (inputPrice !== undefined && outputPrice !== undefined && settings.maxCostPerRequest !== undefined) {
+      const estimatedInputTokens = promptContext.reduce((acc, msg) => acc + Math.ceil(msg.content.length / 4), 0);
+      const estInCost = (estimatedInputTokens / 1000000) * inputPrice;
+      const estOutCost = ((maxOutputTokens || 800) / 1000000) * outputPrice;
+      const maxPossibleCost = estInCost + estOutCost;
+
+      if (maxPossibleCost > settings.maxCostPerRequest) {
+        throw new Error(`Request blocked: Estimated max cost ($${maxPossibleCost.toFixed(4)}) exceeds your global limit ($${settings.maxCostPerRequest.toFixed(2)}). Please shorten your prompt or increase the limit in Settings.`);
+      }
+    }
 
     // 2. Encrypt and store user message
     const userMsgId = randomUUID();
@@ -200,6 +218,7 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
       thinkingLevel: params.thinkingLevel,
       maxOutputTokens,
       sessionToken: params.sessionToken,
+      systemPrompt: settings.systemPrompt,
     });
 
     // 4. Encrypt and store assistant message
