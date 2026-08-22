@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ChatMetadata, AiApiKeyMetadata } from "@ai-vault/types";
 import { Button, Badge } from "@/shared/components";
+import { lockVaultAction } from "@/features/vault/actions/lock-vault.action";
 
 interface ChatSidebarProps {
   isOpen: boolean;
@@ -154,8 +155,8 @@ export function ChatSidebar({
           </div>
         )}
 
-        {/* Bottom Link */}
-        <div className="p-3 border-t border-white/[0.04]">
+        {/* Bottom Actions */}
+        <div className="p-3 border-t border-white/[0.04] space-y-1">
           <Link
             href="/keys"
             className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-neutral-400 hover:text-white hover:bg-white/[0.04] transition-colors"
@@ -165,6 +166,17 @@ export function ChatSidebar({
               {keys.length}
             </Badge>
           </Link>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => lockVaultAction()}
+            className="w-full justify-between text-neutral-500 hover:text-red-400 font-normal px-2.5 py-1.5 h-auto rounded-lg"
+            title="Lock vault immediately"
+          >
+            <span>lock vault</span>
+            <span className="text-[10px] text-neutral-600 font-mono">1h auto</span>
+          </Button>
         </div>
       </aside>
     </>

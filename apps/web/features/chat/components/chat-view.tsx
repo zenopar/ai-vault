@@ -17,6 +17,7 @@ import { ChatMessageItem } from "./chat-message-item";
 import { ThinkingAura } from "./thinking-aura";
 import { ChatInputDeck } from "./chat-input-deck";
 import { ErrorAlert, Button } from "@/shared/components";
+import { AutoLockGuard } from "@/features/vault/components/auto-lock-guard";
 
 interface ChatViewProps {
   initialChats: ChatMetadata[];
@@ -163,73 +164,75 @@ export function ChatView({
   };
 
   return (
-    <div className="flex h-screen w-full bg-[#0e0f12] bg-[radial-gradient(ellipse_80%_60%_at_50%_-15%,rgba(120,119,198,0.08),transparent)] text-neutral-100 overflow-hidden relative">
-      {/* Mobile sidebar toggle button */}
-      {!sidebarOpen && (
-        <Button
-          variant="secondary"
-          size="icon"
-          onClick={() => setSidebarOpen(true)}
-          className="fixed top-3 left-3 z-30 md:hidden bg-[#14151a]/80 backdrop-blur-md border-white/[0.08] text-neutral-400 hover:text-white shadow-md p-2 rounded-lg"
-          title="Open sidebar"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </Button>
-      )}
+    <AutoLockGuard>
+      <div className="flex h-screen w-full bg-[#0e0f12] bg-[radial-gradient(ellipse_80%_60%_at_50%_-15%,rgba(120,119,198,0.08),transparent)] text-neutral-100 overflow-hidden relative">
+        {/* Mobile sidebar toggle button */}
+        {!sidebarOpen && (
+          <Button
+            variant="secondary"
+            size="icon"
+            onClick={() => setSidebarOpen(true)}
+            className="fixed top-3 left-3 z-30 md:hidden bg-[#14151a]/80 backdrop-blur-md border-white/[0.08] text-neutral-400 hover:text-white shadow-md p-2 rounded-lg"
+            title="Open sidebar"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </Button>
+        )}
 
-      <ChatSidebar
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        chats={chats}
-        activeChatId={activeChatId}
-        onSelectChat={handleSelectChat}
-        onNewChat={handleNewChat}
-        onDeleteChat={handleDeleteChat}
-        keys={keys}
-        telemetry={{
-          totalInputTokens,
-          totalOutputTokens,
-          totalThoughtTokens,
-          totalCost,
-        }}
-      />
+        <ChatSidebar
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          chats={chats}
+          activeChatId={activeChatId}
+          onSelectChat={handleSelectChat}
+          onNewChat={handleNewChat}
+          onDeleteChat={handleDeleteChat}
+          keys={keys}
+          telemetry={{
+            totalInputTokens,
+            totalOutputTokens,
+            totalThoughtTokens,
+            totalCost,
+          }}
+        />
 
-      <main className="flex-1 flex flex-col h-full overflow-hidden transition-[padding] duration-200 md:pl-56">
+        <main className="flex-1 flex flex-col h-full overflow-hidden transition-[padding] duration-200 md:pl-56">
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 sm:px-8 md:px-12 py-8">
-          <div className="max-w-4xl mx-auto mb-6">
-            <ErrorAlert message={error} onDismiss={() => setError(null)} />
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-4 sm:px-8 md:px-12 py-8">
+            <div className="max-w-4xl mx-auto mb-6">
+              <ErrorAlert message={error} onDismiss={() => setError(null)} />
+            </div>
+
+            {messages.length > 0 && (
+              <div className="max-w-4xl mx-auto">
+                {messages.map((m) => (
+                  <ChatMessageItem key={m.id} message={m} />
+                ))}
+                {isPending && <ThinkingAura modelName={selectedModel} thinkingLevel={thinkingLevel} />}
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
           </div>
 
-          {messages.length > 0 && (
-            <div className="max-w-4xl mx-auto">
-              {messages.map((m) => (
-                <ChatMessageItem key={m.id} message={m} />
-              ))}
-              {isPending && <ThinkingAura modelName={selectedModel} thinkingLevel={thinkingLevel} />}
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-
-        <ChatInputDeck
-          key={activeChatId || "new-chat"}
-          onSubmit={handleSendMessage}
-          disabled={isPending}
-          keys={keys}
-          selectedKeyId={selectedKeyId}
-          setSelectedKeyId={setSelectedKeyId}
-          models={models}
-          selectedModel={selectedModel}
-          setSelectedModel={setSelectedModel}
-          thinkingLevel={thinkingLevel}
-          setThinkingLevel={setThinkingLevel}
-        />
-      </main>
-    </div>
+          <ChatInputDeck
+            key={activeChatId || "new-chat"}
+            onSubmit={handleSendMessage}
+            disabled={isPending}
+            keys={keys}
+            selectedKeyId={selectedKeyId}
+            setSelectedKeyId={setSelectedKeyId}
+            models={models}
+            selectedModel={selectedModel}
+            setSelectedModel={setSelectedModel}
+            thinkingLevel={thinkingLevel}
+            setThinkingLevel={setThinkingLevel}
+          />
+        </main>
+      </div>
+    </AutoLockGuard>
   );
 }

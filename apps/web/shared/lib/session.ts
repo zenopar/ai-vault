@@ -57,10 +57,17 @@ export async function verifySession(): Promise<boolean> {
 }
 
 /**
- * Destroys the current session from the browser cookie.
- * Note: A full implementation might also want an endpoint on Vault to delete the session hash.
+ * Destroys the current session from the browser cookie and backend.
  */
 export async function destroySession(): Promise<void> {
   const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (token) {
+    try {
+      await VaultApiClient.sendPostRequest<{ success: boolean }>("/lock", { token }, { sessionToken: token });
+    } catch {
+      // Ignore backend teardown errors
+    }
+  }
   cookieStore.delete(SESSION_COOKIE_NAME);
 }

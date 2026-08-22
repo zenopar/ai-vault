@@ -3,6 +3,7 @@ import { verifySession } from "@/shared/lib/session";
 import { getVaultStatus } from "@/features/vault/services/vault-status.service";
 import { listApiKeysService } from "@/features/keys/services/keys.service";
 import { KeysManager } from "@/features/keys/components/keys-manager";
+import { AutoLockGuard } from "@/features/vault/components/auto-lock-guard";
 import { AiApiKeyMetadata } from "@ai-vault/types";
 
 export const dynamic = "force-dynamic";
@@ -26,9 +27,11 @@ export default async function KeysPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0e0f12] text-neutral-100 flex flex-col">
-      <KeysManager initialKeys={keys} />
-    </div>
+    <AutoLockGuard>
+      <div className="min-h-screen bg-[#0e0f12] text-neutral-100 flex flex-col">
+        <KeysManager initialKeys={keys} />
+      </div>
+    </AutoLockGuard>
   );
 }
 
