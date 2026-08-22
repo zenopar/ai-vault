@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ChatMetadata, AiApiKeyMetadata } from "@ai-vault/types";
 import { Button, Badge } from "@/shared/components";
 import { lockVaultAction } from "@/features/vault/actions/lock-vault.action";
-import { BarChart2, Key } from "lucide-react";
+import { BarChart2, Key, Settings } from "lucide-react";
 
 interface ChatSidebarProps {
   isOpen: boolean;
@@ -165,6 +165,16 @@ export function ChatSidebar({
               <span>analytics</span>
             </div>
             <span className="text-[10px] text-neutral-500 font-mono">stats</span>
+          </Link>
+
+          <Link
+            href="/settings"
+            className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-neutral-400 hover:text-white hover:bg-white/[0.04] transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Settings className="w-3.5 h-3.5 text-neutral-500" />
+              <span>settings</span>
+            </div>
           </Link>
 
           <Link
