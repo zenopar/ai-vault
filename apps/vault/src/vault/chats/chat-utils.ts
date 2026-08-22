@@ -40,7 +40,11 @@ export function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedC
         { ciphertext: record.encrypted_metadata, iv: record.metadata_iv, tag: record.metadata_tag },
         dbKey, metaAad
       );
-      metadata = JSON.parse(decMeta.toString("utf-8"));
+      try {
+        metadata = JSON.parse(decMeta.toString("utf-8"));
+      } finally {
+        decMeta.fill(0);
+      }
     } catch (e) { console.warn(`Failed to decrypt metadata for chat ${record.id}:`, e); }
   }
 
@@ -48,7 +52,13 @@ export function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedC
     try {
       const inAad = buildFieldAad("chat", record.id, "input_tokens", record.encryption_version);
       const decIn = decryptBuffer({ ciphertext: record.encrypted_input_tokens, iv: record.input_tokens_iv, tag: record.input_tokens_tag }, dbKey, inAad);
-      const parsedIn = parseInt(decIn.toString("utf-8"), 10);
+      let strIn: string;
+      try {
+        strIn = decIn.toString("utf-8");
+      } finally {
+        decIn.fill(0);
+      }
+      const parsedIn = parseInt(strIn, 10);
       inputTokens = Number.isNaN(parsedIn) ? undefined : parsedIn;
     } catch (e) { console.warn(`Failed to decrypt input_tokens for chat ${record.id}:`, e); }
   }
@@ -57,7 +67,13 @@ export function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedC
     try {
       const outAad = buildFieldAad("chat", record.id, "output_tokens", record.encryption_version);
       const decOut = decryptBuffer({ ciphertext: record.encrypted_output_tokens, iv: record.output_tokens_iv, tag: record.output_tokens_tag }, dbKey, outAad);
-      const parsedOut = parseInt(decOut.toString("utf-8"), 10);
+      let strOut: string;
+      try {
+        strOut = decOut.toString("utf-8");
+      } finally {
+        decOut.fill(0);
+      }
+      const parsedOut = parseInt(strOut, 10);
       outputTokens = Number.isNaN(parsedOut) ? undefined : parsedOut;
     } catch (e) { console.warn(`Failed to decrypt output_tokens for chat ${record.id}:`, e); }
   }
@@ -67,7 +83,13 @@ export function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedC
     try {
       const thoughtAad = buildFieldAad("chat", record.id, "thought_tokens", record.encryption_version);
       const decThought = decryptBuffer({ ciphertext: (record as any).encrypted_thought_tokens, iv: (record as any).thought_tokens_iv, tag: (record as any).thought_tokens_tag }, dbKey, thoughtAad);
-      const parsedThought = parseInt(decThought.toString("utf-8"), 10);
+      let strThought: string;
+      try {
+        strThought = decThought.toString("utf-8");
+      } finally {
+        decThought.fill(0);
+      }
+      const parsedThought = parseInt(strThought, 10);
       thoughtTokens = Number.isNaN(parsedThought) ? undefined : parsedThought;
     } catch (e) { console.warn(`Failed to decrypt thought_tokens for chat ${record.id}:`, e); }
   }
@@ -80,7 +102,13 @@ export function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedC
     try {
       const inCostAad = buildFieldAad("chat", record.id, "input_cost", record.encryption_version);
       const decInCost = decryptBuffer({ ciphertext: record.encrypted_input_cost, iv: record.input_cost_iv, tag: record.input_cost_tag }, dbKey, inCostAad);
-      const parsedInCost = parseFloat(decInCost.toString("utf-8"));
+      let strInCost: string;
+      try {
+        strInCost = decInCost.toString("utf-8");
+      } finally {
+        decInCost.fill(0);
+      }
+      const parsedInCost = parseFloat(strInCost);
       inputCost = Number.isNaN(parsedInCost) ? undefined : parsedInCost;
     } catch (e) { console.warn(`Failed to decrypt input_cost for chat ${record.id}:`, e); }
   }
@@ -89,7 +117,13 @@ export function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedC
     try {
       const outCostAad = buildFieldAad("chat", record.id, "output_cost", record.encryption_version);
       const decOutCost = decryptBuffer({ ciphertext: record.encrypted_output_cost, iv: record.output_cost_iv, tag: record.output_cost_tag }, dbKey, outCostAad);
-      const parsedOutCost = parseFloat(decOutCost.toString("utf-8"));
+      let strOutCost: string;
+      try {
+        strOutCost = decOutCost.toString("utf-8");
+      } finally {
+        decOutCost.fill(0);
+      }
+      const parsedOutCost = parseFloat(strOutCost);
       outputCost = Number.isNaN(parsedOutCost) ? undefined : parsedOutCost;
     } catch (e) { console.warn(`Failed to decrypt output_cost for chat ${record.id}:`, e); }
   }
@@ -98,7 +132,13 @@ export function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedC
     try {
       const totalCostAad = buildFieldAad("chat", record.id, "total_cost", record.encryption_version);
       const decTotalCost = decryptBuffer({ ciphertext: record.encrypted_total_cost, iv: record.total_cost_iv, tag: record.total_cost_tag }, dbKey, totalCostAad);
-      const parsedTotalCost = parseFloat(decTotalCost.toString("utf-8"));
+      let strTotalCost: string;
+      try {
+        strTotalCost = decTotalCost.toString("utf-8");
+      } finally {
+        decTotalCost.fill(0);
+      }
+      const parsedTotalCost = parseFloat(strTotalCost);
       totalCost = Number.isNaN(parsedTotalCost) ? undefined : parsedTotalCost;
     } catch (e) { console.warn(`Failed to decrypt total_cost for chat ${record.id}:`, e); }
   }
@@ -125,7 +165,11 @@ export function decryptChatTitle(record: ChatRecord, dbKey: Buffer, fallbackToUn
       dbKey,
       titleAad
     );
-    return decTitle.toString("utf-8");
+    try {
+      return decTitle.toString("utf-8");
+    } finally {
+      decTitle.fill(0);
+    }
   } catch (e) {
     if (fallbackToUntitled) {
       console.warn(`Failed to decrypt title for chat ${record.id}:`, e);

@@ -164,7 +164,11 @@ export async function getChatMessages(
           dbKey,
           aad
         );
-        content = decrypted.toString("utf-8");
+        try {
+          content = decrypted.toString("utf-8");
+        } finally {
+          decrypted.fill(0);
+        }
       } catch (e) {
         console.warn(`[getChatMessages] Decryption failed for message (${msg.id}):`, e);
       }
@@ -188,7 +192,12 @@ export async function getChatMessages(
             iv: msg.metadata_iv,
             tag: msg.metadata_tag
           }, dbKey, metadataAad);
-          const metadataStr = decMetadata.toString("utf-8");
+          let metadataStr: string;
+          try {
+            metadataStr = decMetadata.toString("utf-8");
+          } finally {
+            decMetadata.fill(0);
+          }
           const metadataObj = JSON.parse(metadataStr);
 
           modelId = metadataObj.model_id ?? undefined;
