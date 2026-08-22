@@ -21,6 +21,7 @@ import {
   ChatNotFoundError
 } from "./vault/chats/index.js";
 import { getAnalyticsSummary } from "./vault/analytics/index.js";
+import { getSettings, updateSettings } from "./vault/settings.js";
 import { NoActiveApiKeyError, UnsupportedProviderError } from "./vault/ai/ai-provider.js";
 import { vaultState } from "./vault/state.js";
 import {
@@ -34,6 +35,9 @@ import {
   SendChatMessageResponse,
   GetChatMessagesResponse,
   AnalyticsSummaryResponse,
+  GetSettingsResponse,
+  UpdateSettingsResponse,
+  UpdateSettingsRequest,
 } from "@ai-vault/types";
 
 
@@ -507,6 +511,34 @@ export function createVaultHttpServer() {
         });
 
         sendJson<AnalyticsSummaryResponse>(res, 200, summary);
+        return;
+      }
+
+      // 17. Get settings
+      if (method === "GET" && pathname === "/settings") {
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+
+        const sessionToken = req.headers["x-session-token"] as string;
+        const settings = await getSettings(sessionToken);
+        sendJson<GetSettingsResponse>(res, 200, { success: true, settings });
+        return;
+      }
+
+      // 18. Update settings
+      if (method === "PUT" && pathname === "/settings") {
+        const body = await readJsonBody<UpdateSettingsRequest>(req);
+
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+
+        const sessionToken = req.headers["x-session-token"] as string;
+        const updated = await updateSettings(body, sessionToken);
+        sendJson<UpdateSettingsResponse>(res, 200, { success: true, settings: updated });
         return;
       }
 

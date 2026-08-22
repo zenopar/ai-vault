@@ -223,4 +223,34 @@ export interface AnalyticsSummaryResponse {
   error?: string;
 }
 
+// === SETTINGS TYPES ===
 
+export interface TokenTierDto {
+  max_cost: number;
+  tokens: number;
+}
+
+export interface SettingsDto {
+  id?: string;
+  systemPrompt: string;
+  tokenTiers: TokenTierDto[];
+  maxCostPerRequest: number;
+}
+
+export interface GetSettingsResponse {
+  success: boolean;
+  settings?: SettingsDto;
+  error?: string;
+}
+
+export interface UpdateSettingsRequest {
+  systemPrompt?: string;
+  tokenTiers?: TokenTierDto[];
+  maxCostPerRequest?: number;
+}
+
+export interface UpdateSettingsResponse {
+  success: boolean;
+  settings?: SettingsDto;
+  error?: string;
+}
