@@ -1,26 +1,91 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0e0f12;
+  --foreground: #e8e8e8;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #0e0f12;
+  color: #e8e8e8;
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+.chat-textarea {
+  field-sizing: content;
+}
+
+/* Hide scrollbars across the entire app while preserving scrolling */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+  width: 0px;
+  height: 0px;
+  background: transparent;
+}
+
+
+/* Elegant wave: expands from center, smooth glow, vanishes */
+@keyframes wave-ripple {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.6;
+  }
+
+  40% {
+    opacity: 0.3;
+  }
+
+  100% {
+    transform: scale(1.08);
+    opacity: 0;
+  }
+}
+
+/* Liquid line flow for thinking */
+@keyframes liquid-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+/* Gentle entrance */
+@keyframes enter {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-enter {
+  animation: enter 0.3s ease-out forwards;
+}
+
+.animate-wave-ripple {
+  animation: wave-ripple 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.animate-liquid-slide {
+  animation: liquid-slide 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
