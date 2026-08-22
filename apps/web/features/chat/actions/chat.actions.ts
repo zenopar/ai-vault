@@ -6,12 +6,25 @@ import {
   sendMessageService,
   deleteChatService,
 } from "../services/chat.service";
-import { ChatMetadata, ChatMessageDto, SendChatMessageResponse } from "@ai-vault/types";
+import { listModelsService } from "../services/models.service";
+import { ChatMetadata, ChatMessageDto, SendChatMessageResponse, AiModelMetadata } from "@ai-vault/types";
 
 export interface ActionResult<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
+}
+
+export async function listModelsAction(provider?: string): Promise<ActionResult<AiModelMetadata[]>> {
+  try {
+    const models = await listModelsService(provider);
+    return { success: true, data: models };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to load models.",
+    };
+  }
 }
 
 export async function listChatsAction(limit = 50, offset = 0): Promise<ActionResult<ChatMetadata[]>> {
@@ -78,3 +91,4 @@ export async function deleteChatAction(chatId: string): Promise<ActionResult<boo
     };
   }
 }
+
