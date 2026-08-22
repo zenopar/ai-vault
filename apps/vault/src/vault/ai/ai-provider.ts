@@ -143,6 +143,7 @@ async function callGemini(
   const payload: Record<string, any> = {
     contents,
     generation_config: generationConfig,
+    tools: [{ google_search: {} }],
   };
 
   if (finalSystemInstructionText) {
