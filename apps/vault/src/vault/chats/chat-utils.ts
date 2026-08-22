@@ -21,11 +21,12 @@ export interface DecryptedChatFields {
   thoughtTokens?: number;
   inputCost?: number;
   outputCost?: number;
+  thoughtCost?: number;
   totalCost?: number;
 }
 
 /**
- * Decrypts chat metadata, inputTokens, and outputTokens.
+ * Decrypts chat metadata, inputTokens, outputTokens, thoughtTokens, and costs.
  * Failures here are swallowed to prevent breaking chat loads.
  */
 export function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedChatFields {
@@ -96,6 +97,7 @@ export function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedC
 
   let inputCost: number | undefined;
   let outputCost: number | undefined;
+  let thoughtCost: number | undefined;
   let totalCost: number | undefined;
 
   if (record.encrypted_input_cost && record.input_cost_iv && record.input_cost_tag) {
@@ -128,6 +130,21 @@ export function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedC
     } catch (e) { console.warn(`Failed to decrypt output_cost for chat ${record.id}:`, e); }
   }
 
+  if ((record as any).encrypted_thought_cost && (record as any).thought_cost_iv && (record as any).thought_cost_tag) {
+    try {
+      const thoughtCostAad = buildFieldAad("chat", record.id, "thought_cost", record.encryption_version);
+      const decThoughtCost = decryptBuffer({ ciphertext: (record as any).encrypted_thought_cost, iv: (record as any).thought_cost_iv, tag: (record as any).thought_cost_tag }, dbKey, thoughtCostAad);
+      let strThoughtCost: string;
+      try {
+        strThoughtCost = decThoughtCost.toString("utf-8");
+      } finally {
+        decThoughtCost.fill(0);
+      }
+      const parsedThoughtCost = parseFloat(strThoughtCost);
+      thoughtCost = Number.isNaN(parsedThoughtCost) ? undefined : parsedThoughtCost;
+    } catch (e) { console.warn(`Failed to decrypt thought_cost for chat ${record.id}:`, e); }
+  }
+
   if (record.encrypted_total_cost && record.total_cost_iv && record.total_cost_tag) {
     try {
       const totalCostAad = buildFieldAad("chat", record.id, "total_cost", record.encryption_version);
@@ -143,7 +160,7 @@ export function decryptChatFields(record: ChatRecord, dbKey: Buffer): DecryptedC
     } catch (e) { console.warn(`Failed to decrypt total_cost for chat ${record.id}:`, e); }
   }
 
-  return { metadata, inputTokens, outputTokens, thoughtTokens, inputCost, outputCost, totalCost };
+  return { metadata, inputTokens, outputTokens, thoughtTokens, inputCost, outputCost, thoughtCost, totalCost };
 }
 
 /**

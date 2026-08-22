@@ -26,6 +26,9 @@ export interface CreateChatData {
   encrypted_output_cost?: string | null;
   output_cost_iv?: string | null;
   output_cost_tag?: string | null;
+  encrypted_thought_cost?: string | null;
+  thought_cost_iv?: string | null;
+  thought_cost_tag?: string | null;
   encrypted_total_cost?: string | null;
   total_cost_iv?: string | null;
   total_cost_tag?: string | null;
@@ -56,6 +59,9 @@ export interface ChatRecord {
   encrypted_output_cost: string | null;
   output_cost_iv: string | null;
   output_cost_tag: string | null;
+  encrypted_thought_cost: string | null;
+  thought_cost_iv: string | null;
+  thought_cost_tag: string | null;
   encrypted_total_cost: string | null;
   total_cost_iv: string | null;
   total_cost_tag: string | null;
@@ -91,6 +97,9 @@ export async function createChatRecord(data: CreateChatData): Promise<ChatRecord
       encrypted_output_cost: data.encrypted_output_cost ?? null,
       output_cost_iv: data.output_cost_iv ?? null,
       output_cost_tag: data.output_cost_tag ?? null,
+      encrypted_thought_cost: data.encrypted_thought_cost ?? null,
+      thought_cost_iv: data.thought_cost_iv ?? null,
+      thought_cost_tag: data.thought_cost_tag ?? null,
       encrypted_total_cost: data.encrypted_total_cost ?? null,
       total_cost_iv: data.total_cost_iv ?? null,
       total_cost_tag: data.total_cost_tag ?? null,
@@ -145,6 +154,9 @@ export async function updateChatRecord(
       ...(data.encrypted_output_cost !== undefined && { encrypted_output_cost: data.encrypted_output_cost }),
       ...(data.output_cost_iv !== undefined && { output_cost_iv: data.output_cost_iv }),
       ...(data.output_cost_tag !== undefined && { output_cost_tag: data.output_cost_tag }),
+      ...(data.encrypted_thought_cost !== undefined && { encrypted_thought_cost: data.encrypted_thought_cost }),
+      ...(data.thought_cost_iv !== undefined && { thought_cost_iv: data.thought_cost_iv }),
+      ...(data.thought_cost_tag !== undefined && { thought_cost_tag: data.thought_cost_tag }),
       ...(data.encrypted_total_cost !== undefined && { encrypted_total_cost: data.encrypted_total_cost }),
       ...(data.total_cost_iv !== undefined && { total_cost_iv: data.total_cost_iv }),
       ...(data.total_cost_tag !== undefined && { total_cost_tag: data.total_cost_tag }),

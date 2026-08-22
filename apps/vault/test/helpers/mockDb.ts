@@ -218,17 +218,23 @@ export function createInMemoryPrismaMock() {
           encrypted_output_tokens: data.encrypted_output_tokens ?? null,
           output_tokens_iv: data.output_tokens_iv ?? null,
           output_tokens_tag: data.output_tokens_tag ?? null,
+          encrypted_thought_tokens: data.encrypted_thought_tokens ?? null,
+          thought_tokens_iv: data.thought_tokens_iv ?? null,
+          thought_tokens_tag: data.thought_tokens_tag ?? null,
           encrypted_input_cost: data.encrypted_input_cost ?? null,
           input_cost_iv: data.input_cost_iv ?? null,
           input_cost_tag: data.input_cost_tag ?? null,
           encrypted_output_cost: data.encrypted_output_cost ?? null,
           output_cost_iv: data.output_cost_iv ?? null,
           output_cost_tag: data.output_cost_tag ?? null,
+          encrypted_thought_cost: data.encrypted_thought_cost ?? null,
+          thought_cost_iv: data.thought_cost_iv ?? null,
+          thought_cost_tag: data.thought_cost_tag ?? null,
           encrypted_total_cost: data.encrypted_total_cost ?? null,
           total_cost_iv: data.total_cost_iv ?? null,
           total_cost_tag: data.total_cost_tag ?? null,
-          created_at: new Date(),
-          updated_at: new Date(),
+          created_at: data.created_at ?? new Date(),
+          updated_at: data.updated_at ?? new Date(),
         };
         chatsMap.set(record.id, record);
         return { ...record };
@@ -268,6 +274,20 @@ export function createInMemoryPrismaMock() {
         if (args?.where?.status) {
           list = list.filter((m) => m.status === args.where.status);
         }
+        if (args?.where?.created_at) {
+          if (args.where.created_at.gte) {
+            const gte = new Date(args.where.created_at.gte).getTime();
+            list = list.filter((m) => new Date(m.created_at).getTime() >= gte);
+          }
+          if (args.where.created_at.lte) {
+            const lte = new Date(args.where.created_at.lte).getTime();
+            list = list.filter((m) => new Date(m.created_at).getTime() <= lte);
+          }
+        }
+        if (args?.orderBy?.created_at) {
+          const dir = args.orderBy.created_at === "desc" ? -1 : 1;
+          return list.sort((a, b) => (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) * dir);
+        }
         return list.sort((a, b) => a.sequence_number - b.sequence_number);
       }),
       findFirst: vi.fn(async (args?: any) => {
@@ -303,8 +323,8 @@ export function createInMemoryPrismaMock() {
           encrypted_metadata: data.encrypted_metadata ?? null,
           metadata_iv: data.metadata_iv ?? null,
           metadata_tag: data.metadata_tag ?? null,
-          created_at: new Date(),
-          updated_at: new Date(),
+          created_at: data.created_at ? new Date(data.created_at) : new Date(),
+          updated_at: data.updated_at ? new Date(data.updated_at) : new Date(),
         };
         messagesMap.set(record.id, record);
         return { ...record };

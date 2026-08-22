@@ -211,16 +211,20 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
     let messageThoughtCost: number | undefined = undefined;
     let messageTotalCost: number | undefined = undefined;
 
-    let inT = 0, outT = 0;
-    if (aiResult.inputTokens !== undefined || aiResult.outputTokens !== undefined) {
+    let inT = 0, outT = 0, thoughtT = 0;
+    if (aiResult.inputTokens !== undefined || aiResult.outputTokens !== undefined || aiResult.thoughtTokens !== undefined) {
       inT = aiResult.inputTokens ?? 0;
       outT = aiResult.outputTokens ?? 0;
+      thoughtT = aiResult.thoughtTokens ?? 0;
       
       if (inputPrice !== undefined || outputPrice !== undefined) {
         const inP = inputPrice ?? 0;
         const outP = outputPrice ?? 0;
         messageInputCost = (inT / 1000000 * inP);
         messageOutputCost = (outT / 1000000 * outP);
+        if (thoughtT > 0) {
+          messageThoughtCost = (thoughtT / 1000000 * outP);
+        }
         messageTotalCost = messageInputCost + messageOutputCost;
       }
     }
@@ -252,23 +256,25 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
     });
 
     // Update Chat Tokens and Cost if needed
-    if (aiResult.inputTokens !== undefined || aiResult.outputTokens !== undefined) {
+    if (aiResult.inputTokens !== undefined || aiResult.outputTokens !== undefined || aiResult.thoughtTokens !== undefined) {
       const chatRecord = await getChatRecordById(chat.id);
       if (chatRecord) {
         await vaultState.withDbKey(params.sessionToken, async (dbKey) => {
           const fields = decryptChatFields(chatRecord, dbKey);
           const chatInputTokens = (fields.inputTokens || 0) + inT;
           const chatOutputTokens = (fields.outputTokens || 0) + outT;
+          const chatThoughtTokens = (fields.thoughtTokens || 0) + thoughtT;
           const chatInputCost = (fields.inputCost || 0) + (messageInputCost ?? 0);
           const chatOutputCost = (fields.outputCost || 0) + (messageOutputCost ?? 0);
+          const chatThoughtCost = (fields.thoughtCost || 0) + (messageThoughtCost ?? 0);
           const chatTotalCost = chatInputCost + chatOutputCost;
-          const chatThoughtTokens = (fields.thoughtTokens || 0) + (aiResult.thoughtTokens || 0);
 
           chat.inputTokens = chatInputTokens;
           chat.outputTokens = chatOutputTokens;
           chat.thoughtTokens = chatThoughtTokens;
           chat.inputCost = chatInputCost;
           chat.outputCost = chatOutputCost;
+          chat.thoughtCost = chatThoughtCost;
           chat.totalCost = chatTotalCost;
 
           const inAad = buildFieldAad("chat", chat.id, "input_tokens", chatRecord.encryption_version);
@@ -286,6 +292,7 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
 
           let encInCost, inCostIv, inCostTag;
           let encOutCost, outCostIv, outCostTag;
+          let encThoughtCost, thoughtCostIv, thoughtCostTag;
           let encTotCost, totCostIv, totCostTag;
 
           if (inputPrice !== undefined || outputPrice !== undefined) {
@@ -296,6 +303,12 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
             const outCostAad = buildFieldAad("chat", chat.id, "output_cost", chatRecord.encryption_version);
             const eOutC = encryptBuffer(Buffer.from(chatOutputCost.toString(), "utf-8"), dbKey, outCostAad);
             encOutCost = eOutC.ciphertext; outCostIv = eOutC.iv; outCostTag = eOutC.tag;
+
+            if (chatThoughtCost > 0) {
+              const thoughtCostAad = buildFieldAad("chat", chat.id, "thought_cost", chatRecord.encryption_version);
+              const eTC = encryptBuffer(Buffer.from(chatThoughtCost.toString(), "utf-8"), dbKey, thoughtCostAad);
+              encThoughtCost = eTC.ciphertext; thoughtCostIv = eTC.iv; thoughtCostTag = eTC.tag;
+            }
 
             const totCostAad = buildFieldAad("chat", chat.id, "total_cost", chatRecord.encryption_version);
             const eTotC = encryptBuffer(Buffer.from(chatTotalCost.toString(), "utf-8"), dbKey, totCostAad);
@@ -318,6 +331,9 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
             encrypted_output_cost: encOutCost,
             output_cost_iv: outCostIv,
             output_cost_tag: outCostTag,
+            encrypted_thought_cost: encThoughtCost,
+            thought_cost_iv: thoughtCostIv,
+            thought_cost_tag: thoughtCostTag,
             encrypted_total_cost: encTotCost,
             total_cost_iv: totCostIv,
             total_cost_tag: totCostTag,

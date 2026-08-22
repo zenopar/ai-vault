@@ -130,3 +130,31 @@ export async function createMessageWithSequence(
     return { record, latestSeq };
   });
 }
+
+export interface MessagesAnalyticsFilter {
+  from?: Date;
+  to?: Date;
+}
+
+export async function getMessagesForAnalytics(filter?: MessagesAnalyticsFilter): Promise<MessageRecord[]> {
+  const prisma = getPrismaClient();
+  const whereClause: any = {
+    status: "ACTIVE",
+  };
+
+  if (filter?.from || filter?.to) {
+    whereClause.created_at = {};
+    if (filter.from) {
+      whereClause.created_at.gte = filter.from;
+    }
+    if (filter.to) {
+      whereClause.created_at.lte = filter.to;
+    }
+  }
+
+  return prisma.messages.findMany({
+    where: whereClause,
+    orderBy: { created_at: "asc" },
+  });
+}
+
