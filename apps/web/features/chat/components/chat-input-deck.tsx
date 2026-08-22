@@ -113,7 +113,6 @@ export function ChatInputDeck({
     description: m.description || undefined,
   }));
 
-
   const handleKeyChange = (id: string) => {
     setSelectedKeyId(id);
     const k = keys.find((x) => x.id === id);
@@ -139,7 +138,6 @@ export function ChatInputDeck({
         />
 
         <div className="relative z-10 rounded-2xl border border-white/[0.09] bg-[#14151a]/95 backdrop-blur-xl focus-within:border-white/[0.18] shadow-2xl shadow-black/60 transition-[border-color,box-shadow] duration-200">
-
           {/* Textarea */}
           <textarea
             ref={textareaRef}

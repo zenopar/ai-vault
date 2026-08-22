@@ -12,6 +12,12 @@ interface ChatSidebarProps {
   onNewChat: () => void;
   onDeleteChat: (chatId: string) => void;
   keys: AiApiKeyMetadata[];
+  telemetry?: {
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalThoughtTokens: number;
+    totalCost: number;
+  };
 }
 
 export function ChatSidebar({
@@ -23,7 +29,19 @@ export function ChatSidebar({
   onNewChat,
   onDeleteChat,
   keys,
+  telemetry,
 }: ChatSidebarProps) {
+  const hasTelemetry =
+    activeChatId &&
+    telemetry &&
+    (telemetry.totalInputTokens > 0 || telemetry.totalOutputTokens > 0 || telemetry.totalCost > 0);
+
+  const formatCost = (cost: number) => {
+    if (cost === 0) return "$0.00";
+    if (cost < 0.01) return `$${cost.toFixed(4)}`;
+    return `$${cost.toFixed(3)}`;
+  };
+
   return (
     <>
       {/* Mobile backdrop */}
@@ -96,6 +114,41 @@ export function ChatSidebar({
             })
           )}
         </div>
+
+        {/* Telemetry info for active chat */}
+        {hasTelemetry && (
+          <div className="p-3 border-t border-white/[0.04] space-y-1.5 text-[11px] text-neutral-500">
+            <div className="text-[10px] text-neutral-600 uppercase tracking-wider">
+              session usage
+            </div>
+            <div className="flex items-center justify-between text-neutral-400">
+              <span>tokens in</span>
+              <span className="text-neutral-300 font-mono">
+                {telemetry.totalInputTokens.toLocaleString()}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-neutral-400">
+              <span>tokens out</span>
+              <span className="text-neutral-300 font-mono">
+                {telemetry.totalOutputTokens.toLocaleString()}
+              </span>
+            </div>
+            {telemetry.totalThoughtTokens > 0 && (
+              <div className="flex items-center justify-between text-neutral-400">
+                <span>thought</span>
+                <span className="text-indigo-300 font-mono">
+                  {telemetry.totalThoughtTokens.toLocaleString()}
+                </span>
+              </div>
+            )}
+            <div className="flex items-center justify-between text-neutral-400 pt-1 border-t border-white/[0.03]">
+              <span>total cost</span>
+              <span className="text-emerald-400 font-mono font-medium">
+                {formatCost(telemetry.totalCost)}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Bottom Link */}
         <div className="p-3 border-t border-white/[0.04]">

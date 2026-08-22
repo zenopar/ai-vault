@@ -178,34 +178,6 @@ export function ChatView({
         </button>
       )}
 
-      {/* Top right cumulative chat telemetry widget */}
-      {messages.length > 0 && (totalInputTokens > 0 || totalOutputTokens > 0 || totalCost > 0) && (
-        <div className="fixed top-3.5 right-4 z-20 flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-[#14151a]/85 backdrop-blur-md border border-white/[0.08] font-mono text-[11px] text-neutral-400 shadow-lg select-none animate-enter">
-          <div className="flex items-center gap-1">
-            <span className="text-neutral-500">in:</span>
-            <span className="text-neutral-200">{totalInputTokens.toLocaleString()}</span>
-          </div>
-          <span className="text-white/10">·</span>
-          <div className="flex items-center gap-1">
-            <span className="text-neutral-500">out:</span>
-            <span className="text-neutral-200">{totalOutputTokens.toLocaleString()}</span>
-          </div>
-          {totalThoughtTokens > 0 && (
-            <>
-              <span className="text-white/10">·</span>
-              <div className="flex items-center gap-1">
-                <span className="text-neutral-500">thought:</span>
-                <span className="text-indigo-300">{totalThoughtTokens.toLocaleString()}</span>
-              </div>
-            </>
-          )}
-          <span className="text-white/10">·</span>
-          <div className="flex items-center gap-1 text-emerald-400 font-medium">
-            <span>{formatTotalCost(totalCost)}</span>
-          </div>
-        </div>
-      )}
-
       <ChatSidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
@@ -215,6 +187,12 @@ export function ChatView({
         onNewChat={handleNewChat}
         onDeleteChat={handleDeleteChat}
         keys={keys}
+        telemetry={{
+          totalInputTokens,
+          totalOutputTokens,
+          totalThoughtTokens,
+          totalCost,
+        }}
       />
 
       <main className="flex-1 flex flex-col h-full overflow-hidden transition-[padding] duration-200 md:pl-56">
