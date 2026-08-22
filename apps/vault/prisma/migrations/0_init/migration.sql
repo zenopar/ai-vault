@@ -217,6 +217,44 @@ FOR EACH ROW
 EXECUTE FUNCTION "vault"."set_updated_at"();
 
 
+-- ============================================================================
+-- Table for storing global application settings (System prompts, limits, etc.)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS "vault"."settings" (
+    "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "encryption_version" INT NOT NULL DEFAULT 1,
+    
+    -- Encrypted Global System Prompt (AES-256-GCM via DB Key)
+    -- AAD format: type:settings|id:<id>|field:system_prompt|v:<encryption_version>
+    "encrypted_system_prompt" TEXT,
+    "system_prompt_iv" VARCHAR(32),
+    "system_prompt_tag" VARCHAR(32),
+    
+    -- Encrypted token limits JSON config containing max output tokens based on cost tier thresholds
+    -- Expected JSON format: [{ "max_cost": 0.50, "tokens": 4000 }, { "max_cost": 2.50, "tokens": 2500 }, ...]
+    -- AAD format: type:settings|id:<id>|field:token_tiers|v:<encryption_version>
+    "encrypted_token_tiers" TEXT,
+    "token_tiers_iv" VARCHAR(32),
+    "token_tiers_tag" VARCHAR(32),
+
+    -- Financial limits / Cost controls
+    -- AAD format: type:settings|id:<id>|field:max_cost_per_request|v:<encryption_version>
+    "encrypted_max_cost_per_request" TEXT,
+    "max_cost_per_request_iv" VARCHAR(32),
+    "max_cost_per_request_tag" VARCHAR(32),
+    
+    -- Timestamps
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+DROP TRIGGER IF EXISTS "trg_settings_updated_at" ON "vault"."settings";
+CREATE TRIGGER "trg_settings_updated_at"
+BEFORE UPDATE ON "vault"."settings"
+FOR EACH ROW
+EXECUTE FUNCTION "vault"."set_updated_at"();
+
+
 -- Seed default models for common providers
 INSERT INTO "vault"."models" ("provider", "name", "display_name", "description", "context_window", "input_price_per_1m", "output_price_per_1m", "is_active")
 VALUES
