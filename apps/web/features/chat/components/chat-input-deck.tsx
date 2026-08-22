@@ -200,18 +200,19 @@ export function ChatInputDeck({
 
               <div className="hidden sm:flex items-center gap-0.5 bg-white/[0.03] border border-white/[0.05] p-0.5 rounded-lg shrink-0">
                 {thinkingOpts.map((o) => (
-                  <button
+                  <Button
                     key={o.id}
-                    type="button"
+                    variant={thinkingLevel === o.id ? "secondary" : "ghost"}
+                    size="sm"
                     onClick={() => setThinkingLevel(o.id)}
-                    className={`px-2 py-0.5 rounded-md transition-all cursor-pointer text-[11px] ${
+                    className={`px-2 py-0.5 h-auto text-[11px] font-mono rounded-md ${
                       thinkingLevel === o.id
                         ? "text-white bg-white/[0.12] font-medium shadow-xs"
                         : "text-neutral-500 hover:text-neutral-300"
                     }`}
                   >
                     {o.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ChatMetadata } from "@ai-vault/types";
+import { Button } from "@/shared/components";
 
 interface ChatTelemetryHudProps {
   chat?: ChatMetadata | null;
@@ -31,16 +32,17 @@ export function ChatTelemetryHud({
   return (
     <header className="w-full px-5 py-3 flex items-center justify-between text-[11px] font-mono text-neutral-400 bg-[#0e0f12]/40 backdrop-blur-md border-b border-white/[0.04] select-none z-10">
       <div className="flex items-center gap-3">
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={onToggleSidebar}
-          className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.05] transition-all cursor-pointer"
+          className="p-1.5 rounded-lg text-neutral-400 hover:text-white"
           title="Toggle sidebar"
         >
           <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
-        </button>
+        </Button>
 
         <span className="text-neutral-200 text-xs font-sans font-medium truncate max-w-xs sm:max-w-md">
           {chat?.title || "New Chat"}

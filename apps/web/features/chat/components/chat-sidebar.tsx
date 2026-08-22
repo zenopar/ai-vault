@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ChatMetadata, AiApiKeyMetadata } from "@ai-vault/types";
+import { Button, Badge } from "@/shared/components";
 
 interface ChatSidebarProps {
   isOpen: boolean;
@@ -60,22 +61,24 @@ export function ChatSidebar({
       >
         {/* Top Action */}
         <div className="p-2.5 flex items-center gap-2 border-b border-white/[0.04]">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={onNewChat}
-            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs text-neutral-300 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] hover:border-white/[0.12] rounded-lg transition-all cursor-pointer select-none"
+            className="flex-1 justify-center gap-1.5 py-1.5 text-xs text-neutral-300 hover:text-white"
           >
             <span>+</span>
             <span>new chat</span>
-          </button>
+          </Button>
 
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={onClose}
-            className="md:hidden text-neutral-500 hover:text-white text-xs p-1.5 rounded-lg hover:bg-white/[0.04] cursor-pointer"
+            className="md:hidden text-neutral-500 hover:text-white text-xs p-1.5 h-auto rounded-lg"
           >
             ✕
-          </button>
+          </Button>
         </div>
 
         {/* Chats list */}
@@ -98,17 +101,18 @@ export function ChatSidebar({
                   }`}
                 >
                   <span className="truncate pr-2">{c.title || "untitled"}</span>
-                  <button
-                    type="button"
+                  <Button
+                    variant="danger"
+                    size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
                       onDeleteChat(c.id);
                     }}
-                    className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 text-xs px-1 rounded transition-opacity cursor-pointer"
+                    className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 text-xs px-1 py-0 h-auto rounded transition-opacity"
                     title="delete"
                   >
                     ×
-                  </button>
+                  </Button>
                 </div>
               );
             })
@@ -157,9 +161,9 @@ export function ChatSidebar({
             className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-neutral-400 hover:text-white hover:bg-white/[0.04] transition-colors"
           >
             <span>keys</span>
-            <span className="text-[10px] text-neutral-500 px-1.5 py-0.5 rounded bg-white/[0.04] border border-white/[0.06]">
+            <Badge variant="mono" className="text-[10px] px-1.5 py-0.5">
               {keys.length}
-            </span>
+            </Badge>
           </Link>
         </div>
       </aside>

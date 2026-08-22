@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Button } from "@/shared/components";
 
 interface MarkdownRendererProps {
   content: string;
@@ -29,15 +30,16 @@ function CodeBlock({
 
   return (
     <div className="my-4 rounded-xl overflow-hidden bg-[#131418] border border-white/[0.08] shadow-md">
-      <div className="flex items-center justify-between px-4 py-2 text-[11px] font-mono text-neutral-400 bg-white/[0.03] border-b border-white/[0.05]">
+      <div className="flex items-center justify-between px-4 py-1.5 text-[11px] font-mono text-neutral-400 bg-white/[0.03] border-b border-white/[0.05]">
         <span className="font-medium text-neutral-300">{language || "code"}</span>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={handleCopy}
-          className="hover:text-white transition-colors cursor-pointer font-mono"
+          className="text-neutral-400 hover:text-white px-1.5 py-0.5 h-auto text-[10.5px]"
         >
           {copied ? "✓ copied" : "copy"}
-        </button>
+        </Button>
       </div>
       <pre className="p-4 overflow-x-auto text-[13px] font-mono text-neutral-200 leading-relaxed">
         <code>{code}</code>

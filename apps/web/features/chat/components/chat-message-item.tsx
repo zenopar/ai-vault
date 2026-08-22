@@ -3,6 +3,7 @@
 import { useState, memo } from "react";
 import { ChatMessageDto } from "@ai-vault/types";
 import { MarkdownRenderer } from "./markdown-renderer";
+import { Button } from "@/shared/components";
 
 interface ChatMessageItemProps {
   message: ChatMessageDto;
@@ -54,22 +55,28 @@ export const ChatMessageItem = memo(function ChatMessageItem({ message }: ChatMe
             <span>· {message.outputTokens ?? 0} out</span>
             {(message.thoughtTokens ?? 0) > 0 && <span>· {message.thoughtTokens} thought</span>}
             <span>· {formatCost(message.totalCost)}</span>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={handleCopy}
-              className="ml-1 text-neutral-500 hover:text-neutral-200 transition-colors cursor-pointer"
+              className="ml-1 text-neutral-500 hover:text-neutral-200 px-1.5 py-0.5 h-auto text-[11px]"
             >
               {copied ? "✓ copied" : "copy"}
-            </button>
+            </Button>
           </div>
         )}
 
         {/* Copy for user messages */}
         {!isAssistant && (
           <div className="mt-1 text-right font-mono text-[11px] text-neutral-600">
-            <button onClick={handleCopy} className="hover:text-neutral-400 transition-colors cursor-pointer">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCopy}
+              className="hover:text-neutral-400 px-1.5 py-0.5 h-auto text-[11px]"
+            >
               {copied ? "copied" : "copy"}
-            </button>
+            </Button>
           </div>
         )}
       </div>

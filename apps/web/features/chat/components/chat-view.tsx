@@ -16,7 +16,7 @@ import { ChatSidebar } from "./chat-sidebar";
 import { ChatMessageItem } from "./chat-message-item";
 import { ThinkingAura } from "./thinking-aura";
 import { ChatInputDeck } from "./chat-input-deck";
-import { ErrorAlert } from "@/shared/components";
+import { ErrorAlert, Button } from "@/shared/components";
 
 interface ChatViewProps {
   initialChats: ChatMetadata[];
@@ -166,16 +166,17 @@ export function ChatView({
     <div className="flex h-screen w-full bg-[#0e0f12] bg-[radial-gradient(ellipse_80%_60%_at_50%_-15%,rgba(120,119,198,0.08),transparent)] text-neutral-100 overflow-hidden relative">
       {/* Mobile sidebar toggle button */}
       {!sidebarOpen && (
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="icon"
           onClick={() => setSidebarOpen(true)}
-          className="fixed top-3 left-3 z-30 md:hidden p-2 rounded-lg bg-[#14151a]/80 backdrop-blur-md border border-white/[0.08] text-neutral-400 hover:text-white shadow-md cursor-pointer transition-colors"
+          className="fixed top-3 left-3 z-30 md:hidden bg-[#14151a]/80 backdrop-blur-md border-white/[0.08] text-neutral-400 hover:text-white shadow-md p-2 rounded-lg"
           title="Open sidebar"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
-        </button>
+        </Button>
       )}
 
       <ChatSidebar

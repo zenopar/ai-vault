@@ -65,13 +65,14 @@ export function InitVaultForm() {
               {recoveryCode}
             </code>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={handleCopy}
-            className="w-full py-2 text-xs font-mono text-neutral-400 hover:text-white transition-colors cursor-pointer text-center"
+            className="w-full text-xs"
           >
             {copied ? "✓ copied to clipboard" : "copy recovery code"}
-          </button>
+          </Button>
         </div>
 
         <Button
