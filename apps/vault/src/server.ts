@@ -20,6 +20,7 @@ import {
   removeChat,
   ChatNotFoundError
 } from "./vault/chats/index.js";
+import { getAnalyticsSummary } from "./vault/analytics/index.js";
 import { NoActiveApiKeyError, UnsupportedProviderError } from "./vault/ai/ai-provider.js";
 import { vaultState } from "./vault/state.js";
 import {
@@ -31,8 +32,10 @@ import {
   ListModelsResponse,
   ListChatsResponse,
   SendChatMessageResponse,
-  GetChatMessagesResponse
+  GetChatMessagesResponse,
+  AnalyticsSummaryResponse,
 } from "@ai-vault/types";
+
 
 
 function readJsonBody<T = any>(req: IncomingMessage): Promise<T> {
@@ -474,6 +477,36 @@ export function createVaultHttpServer() {
 
         await removeChat(chatId, sessionToken);
         sendJson(res, 200, { success: true });
+        return;
+      }
+
+      // 16. Analytics / Stats summary
+      if (method === "GET" && (pathname === "/analytics" || pathname === "/stats")) {
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+
+        const sessionToken = req.headers["x-session-token"] as string;
+        const period = url.searchParams.get("period") || undefined;
+        const from = url.searchParams.get("from") || undefined;
+        const to = url.searchParams.get("to") || undefined;
+        const topChatsLimitParam = url.searchParams.get("topChatsLimit");
+
+        const topChatsLimit = topChatsLimitParam ? parseInt(topChatsLimitParam, 10) : undefined;
+        if (topChatsLimitParam && Number.isNaN(topChatsLimit)) {
+          sendJson(res, 400, { error: "Invalid topChatsLimit parameter." });
+          return;
+        }
+
+        const summary = await getAnalyticsSummary(sessionToken, {
+          period,
+          from,
+          to,
+          topChatsLimit,
+        });
+
+        sendJson<AnalyticsSummaryResponse>(res, 200, summary);
         return;
       }
 
