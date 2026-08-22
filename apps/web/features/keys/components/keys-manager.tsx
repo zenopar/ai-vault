@@ -1,12 +1,23 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { AiApiKeyMetadata } from "@ai-vault/types";
 import { addApiKeyAction, deleteApiKeyAction } from "../actions/keys.action";
+import { Button, Input, DropdownSelect, Card, ErrorAlert, Badge } from "@/shared/components";
 
 interface KeysManagerProps {
   initialKeys: AiApiKeyMetadata[];
 }
+
+const PROVIDER_OPTIONS = [
+  { value: "google", label: "Google Gemini" },
+  { value: "openai", label: "OpenAI" },
+  { value: "anthropic", label: "Anthropic Claude" },
+  { value: "deepseek", label: "DeepSeek" },
+  { value: "groq", label: "Groq" },
+  { value: "custom", label: "Custom / Other" },
+];
 
 export function KeysManager({ initialKeys }: KeysManagerProps) {
   const [keys, setKeys] = useState<AiApiKeyMetadata[]>(initialKeys);
@@ -16,8 +27,7 @@ export function KeysManager({ initialKeys }: KeysManagerProps) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
+  const handleProviderChange = (val: string) => {
     setProvider(val);
     if (val === "google") setName("Google Gemini");
     else if (val === "openai") setName("OpenAI");
@@ -26,6 +36,7 @@ export function KeysManager({ initialKeys }: KeysManagerProps) {
     else if (val === "groq") setName("Groq");
     else setName("Custom AI Key");
   };
+
 
   const handleAddKey = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -63,131 +74,150 @@ export function KeysManager({ initialKeys }: KeysManagerProps) {
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-6">
-      {/* Form Card */}
-      <div className="bg-white rounded-lg shadow-md border border-gray-100 p-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">API Keys</h2>
-        <p className="text-gray-500 text-sm mb-6">
-          Add and manage your AI API keys.
-        </p>
+    <div className="flex-1 flex flex-col w-full bg-[#0e0f12] bg-[radial-gradient(ellipse_80%_60%_at_50%_-15%,rgba(120,119,198,0.08),transparent)] text-neutral-100 min-h-screen">
+      {/* Top Header */}
+      <header className="w-full px-5 py-3.5 flex items-center justify-between text-[11px] font-mono text-neutral-400 bg-[#0e0f12]/60 backdrop-blur-md border-b border-white/[0.04] select-none">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/app"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-neutral-300 hover:text-white border border-white/[0.06] transition-all cursor-pointer"
+          >
+            <span>←</span>
+            <span>app</span>
+          </Link>
+          <span className="text-neutral-700">/</span>
+          <span className="text-neutral-200 font-sans font-medium">API Keys</span>
+        </div>
 
-        <form onSubmit={handleAddKey} className="flex flex-col gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Provider
-            </label>
-            <select
-              value={provider}
-              onChange={handleProviderChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-black bg-white"
-            >
-              <option value="google">Google Gemini</option>
-              <option value="openai">OpenAI</option>
-              <option value="anthropic">Anthropic Claude</option>
-              <option value="deepseek">DeepSeek</option>
-              <option value="groq">Groq</option>
-              <option value="custom">Custom / Other</option>
-            </select>
+        <div className="flex items-center gap-3">
+          <span className="text-neutral-500">
+            {keys.length} active key{keys.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="flex-1 max-w-3xl w-full mx-auto px-5 py-8 space-y-8 animate-enter">
+        {/* Form Card */}
+        <Card className="p-6 sm:p-8 space-y-6">
+          <div className="space-y-1">
+            <h2 className="text-base font-medium text-neutral-100 font-sans">Add API Key</h2>
+            <p className="text-xs text-neutral-500 font-mono">
+              Configure credentials for Gemini, OpenAI, Claude, DeepSeek, or Groq
+            </p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Name
-            </label>
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Gemini 1.5 Pro"
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-black"
-            />
-          </div>
+          <form onSubmit={handleAddKey} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <DropdownSelect
+                label="Provider"
+                options={PROVIDER_OPTIONS}
+                value={provider}
+                onChange={handleProviderChange}
+                variant="input"
+                direction="down"
+                className="w-full"
+              />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              API Key
-            </label>
-            <input
+              <Input
+                label="Key Name"
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Gemini Production"
+              />
+            </div>
+
+
+            <Input
+              label="API Secret Key"
               type="password"
               required
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Enter API key"
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-black font-mono text-sm"
+              placeholder="sk-..."
+              isMono
             />
+
+            <ErrorAlert message={error} onDismiss={() => setError(null)} />
+
+            <div className="pt-2 flex justify-end">
+              <Button
+                type="submit"
+                isLoading={isPending}
+                disabled={!apiKey.trim()}
+              >
+                Add Key
+              </Button>
+            </div>
+          </form>
+        </Card>
+
+        {/* List Card */}
+        <Card className="p-6 sm:p-8 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium text-neutral-200 font-sans">Saved Credentials</h3>
+            <span className="font-mono text-xs text-neutral-500">
+              {keys.length} configured
+            </span>
           </div>
 
-          {error && (
-            <div className="p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md">
-              {error}
+          {keys.length === 0 ? (
+            <div className="py-8 text-center text-xs font-mono text-neutral-500">
+              No API keys configured yet.
             </div>
-          )}
+          ) : (
+            <div className="divide-y divide-white/[0.04]">
+              {keys.map((k) => (
+                <div
+                  key={k.id}
+                  className="py-4 first:pt-2 last:pb-0 flex flex-col sm:flex-row sm:items-start justify-between gap-4 group hover:bg-white/[0.01] -mx-2 px-2 rounded-xl transition-colors"
+                >
+                  <div className="space-y-2 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-neutral-100 text-sm font-sans">{k.name}</span>
+                      <Badge variant="default">{k.provider}</Badge>
+                    </div>
 
-          <button
-            type="submit"
-            disabled={isPending}
-            className="w-full px-4 py-2 mt-2 text-white bg-black rounded-md hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
-          >
-            {isPending ? "Adding..." : "Add Key"}
-          </button>
-        </form>
-      </div>
+                    <div className="text-[11px] text-neutral-500 font-mono flex items-center gap-2">
+                      <span>id: {k.id.slice(0, 8)}...</span>
+                      <span>·</span>
+                      <span>created {new Date(k.createdAt).toLocaleDateString()}</span>
+                    </div>
 
-      {/* List Card */}
-      <div className="bg-white rounded-lg shadow-md border border-gray-100 p-8">
-        <h3 className="text-lg font-bold text-gray-900 mb-4">Saved Keys</h3>
-
-        {keys.length === 0 ? (
-          <p className="text-gray-500 text-sm">No API keys saved yet.</p>
-        ) : (
-          <div className="divide-y divide-gray-100">
-            {keys.map((k) => (
-              <div key={k.id} className="py-4 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                <div className="space-y-1.5 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-gray-900 text-base">{k.name}</span>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 uppercase tracking-wider">
-                      {k.provider}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-400 font-mono">
-                    ID: {k.id.slice(0, 8)}... • Created {new Date(k.createdAt).toLocaleDateString()}
-                  </div>
-
-                  {k.models && k.models.length > 0 && (
-                    <div className="pt-2">
-                      <div className="text-xs font-medium text-gray-500 mb-1.5">Supported Models:</div>
-                      <div className="flex flex-wrap gap-1.5">
+                    {k.models && k.models.length > 0 && (
+                      <div className="pt-1 flex flex-wrap gap-1.5">
                         {k.models.map((model) => (
-                          <span
+                          <Badge
                             key={model.id}
+                            variant="model"
                             title={model.description || model.displayName}
-                            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-mono bg-blue-50 text-blue-700 border border-blue-100"
                           >
-                            {model.name}
-                          </span>
+                            {model.displayName || model.name}
+                          </Badge>
                         ))}
                       </div>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
 
-                <div className="self-end sm:self-start pt-1">
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteKey(k.id, k.name)}
-                    disabled={isPending}
-                    className="text-xs text-red-600 hover:text-red-800 font-medium px-2.5 py-1.5 rounded border border-transparent hover:border-red-100 hover:bg-red-50 transition-colors"
-                  >
-                    Delete
-                  </button>
+                  <div className="self-end sm:self-start pt-1">
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => handleDeleteKey(k.id, k.name)}
+                      disabled={isPending}
+                    >
+                      delete
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </main>
     </div>
   );
 }
+

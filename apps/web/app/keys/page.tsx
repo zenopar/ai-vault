@@ -26,8 +26,10 @@ export default async function KeysPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
+    <div className="min-h-screen bg-[#0e0f12] text-neutral-100 flex flex-col">
       <KeysManager initialKeys={keys} />
     </div>
   );
 }
+
+
