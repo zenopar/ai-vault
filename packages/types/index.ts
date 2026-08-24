@@ -235,6 +235,9 @@ export interface SettingsDto {
   systemPrompt: string;
   tokenTiers: TokenTierDto[];
   maxCostPerRequest: number;
+  titlePrompt?: string;
+  titleApiKeyId?: string | null;
+  titleModelId?: string | null;
 }
 
 export interface GetSettingsResponse {
@@ -247,6 +250,9 @@ export interface UpdateSettingsRequest {
   systemPrompt?: string;
   tokenTiers?: TokenTierDto[];
   maxCostPerRequest?: number;
+  titlePrompt?: string;
+  titleApiKeyId?: string | null;
+  titleModelId?: string | null;
 }
 
 export interface UpdateSettingsResponse {
