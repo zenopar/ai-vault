@@ -170,14 +170,25 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
     const promptContext = buildPromptContext(existingMessages, trimmedMessage, maxTokens);
 
     // 1.5 Enforce Max Cost
+    let finalMaxOutputTokens = maxOutputTokens || 800;
+
     if (inputPrice !== undefined && outputPrice !== undefined && settings.maxCostPerRequest !== undefined) {
       const estimatedInputTokens = promptContext.reduce((acc, msg) => acc + Math.ceil(msg.content.length / 4), 0);
       const estInCost = (estimatedInputTokens / 1000000) * inputPrice;
-      const estOutCost = ((maxOutputTokens || 800) / 1000000) * outputPrice;
-      const maxPossibleCost = estInCost + estOutCost;
 
-      if (maxPossibleCost > settings.maxCostPerRequest) {
-        throw new Error(`Request blocked: Estimated max cost ($${maxPossibleCost.toFixed(4)}) exceeds your global limit ($${settings.maxCostPerRequest.toFixed(2)}). Please shorten your prompt or increase the limit in Settings.`);
+      if (estInCost >= settings.maxCostPerRequest) {
+        throw new Error(`Request blocked: Estimated input cost alone ($${estInCost.toFixed(4)}) exceeds your global limit ($${settings.maxCostPerRequest.toFixed(2)}). Please shorten your prompt or increase the limit in Settings.`);
+      }
+
+      const remainingBudget = settings.maxCostPerRequest - estInCost;
+      const affordableOutputTokens = Math.floor((remainingBudget / outputPrice) * 1000000);
+
+      if (affordableOutputTokens < finalMaxOutputTokens) {
+        finalMaxOutputTokens = affordableOutputTokens;
+      }
+
+      if (finalMaxOutputTokens < 50) {
+        throw new Error(`Request blocked: Remaining budget after input cost only affords ${finalMaxOutputTokens} output tokens. Please shorten your prompt or increase the cost limit.`);
       }
     }
 
@@ -216,7 +227,7 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
       provider: params.provider,
       model: params.model,
       thinkingLevel: params.thinkingLevel,
-      maxOutputTokens,
+      maxOutputTokens: finalMaxOutputTokens,
       sessionToken: params.sessionToken,
       systemPrompt: settings.systemPrompt,
     });
