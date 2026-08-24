@@ -29,6 +29,21 @@ export const ChatMessageItem = memo(function ChatMessageItem({ message }: ChatMe
     return `$${cost.toFixed(2)}`;
   };
 
+  const formatTime = (dateStr?: string) => {
+    if (!dateStr) return "";
+    try {
+      return new Date(dateStr).toLocaleString(undefined, {
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return "";
+    }
+  };
+
   return (
     <div className={`w-full flex my-6 animate-enter ${isAssistant ? "justify-start" : "justify-end"}`}>
       <div className={`${isAssistant ? "w-full text-neutral-200" : "max-w-[85%] sm:max-w-[80%] text-neutral-100"}`}>
@@ -47,14 +62,19 @@ export const ChatMessageItem = memo(function ChatMessageItem({ message }: ChatMe
 
 
         {/* Metrics line for assistant */}
-        {isAssistant && (message.inputTokens !== undefined || message.outputTokens !== undefined) && (
+        {isAssistant && (
           <div className="mt-2.5 flex flex-wrap items-center gap-2 font-mono text-[11px] text-neutral-500">
             {message.modelName && <span className="text-neutral-400">{message.modelName}</span>}
             {message.thinkingLevel && message.thinkingLevel !== "none" && <span>· {message.thinkingLevel}</span>}
-            <span>· {message.inputTokens ?? 0} in</span>
-            <span>· {message.outputTokens ?? 0} out</span>
-            {(message.thoughtTokens ?? 0) > 0 && <span>· {message.thoughtTokens} thought</span>}
-            <span>· {formatCost(message.totalCost)}</span>
+            {(message.inputTokens !== undefined || message.outputTokens !== undefined) && (
+              <>
+                <span>· {message.inputTokens ?? 0} in</span>
+                <span>· {message.outputTokens ?? 0} out</span>
+                {(message.thoughtTokens ?? 0) > 0 && <span>· {message.thoughtTokens} thought</span>}
+                <span>· {formatCost(message.totalCost)}</span>
+              </>
+            )}
+            {message.createdAt && <span>· {formatTime(message.createdAt)}</span>}
             <Button
               variant="ghost"
               size="sm"
@@ -68,7 +88,8 @@ export const ChatMessageItem = memo(function ChatMessageItem({ message }: ChatMe
 
         {/* Copy for user messages */}
         {!isAssistant && (
-          <div className="mt-1 text-right font-mono text-[11px] text-neutral-600">
+          <div className="mt-1 flex justify-end items-center gap-2 font-mono text-[11px] text-neutral-600">
+            {message.createdAt && <span>{formatTime(message.createdAt)}</span>}
             <Button
               variant="ghost"
               size="sm"
