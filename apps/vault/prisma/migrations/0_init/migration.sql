@@ -243,6 +243,16 @@ CREATE TABLE IF NOT EXISTS "vault"."settings" (
     "max_cost_per_request_iv" VARCHAR(32),
     "max_cost_per_request_tag" VARCHAR(32),
     
+    -- Encrypted Chat Title Generation Prompt (AES-256-GCM via DB Key)
+    -- AAD format: type:settings|id:<id>|field:title_prompt|v:<encryption_version>
+    "encrypted_title_prompt" TEXT,
+    "title_prompt_iv" VARCHAR(32),
+    "title_prompt_tag" VARCHAR(32),
+
+    -- Settings for Title Generation AI
+    "title_api_key_id" UUID REFERENCES "vault"."ai_api_keys" ("id") ON DELETE SET NULL,
+    "title_model_id" UUID REFERENCES "vault"."models" ("id") ON DELETE SET NULL,
+    
     -- Timestamps
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP

@@ -40,6 +40,8 @@ model ai_api_keys {
   created_at    DateTime @default(now()) @db.Timestamptz(6)
   updated_at    DateTime @default(now()) @db.Timestamptz(6)
 
+  settings_title_api_key settings[] @relation("title_api_key")
+
   @@schema("vault")
 }
 
@@ -55,6 +57,8 @@ model models {
   is_active           Boolean  @default(true)
   created_at          DateTime @default(now()) @db.Timestamptz(6)
   updated_at          DateTime @default(now()) @db.Timestamptz(6)
+
+  settings_title_model settings[] @relation("title_model")
 
   @@unique([provider, name], map: "uq_models_provider_name")
   @@index([provider], map: "idx_models_provider")
@@ -140,8 +144,18 @@ model settings {
   encrypted_max_cost_per_request String?
   max_cost_per_request_iv        String?  @db.VarChar(32)
   max_cost_per_request_tag       String?  @db.VarChar(32)
+
+  encrypted_title_prompt         String?
+  title_prompt_iv                String?  @db.VarChar(32)
+  title_prompt_tag               String?  @db.VarChar(32)
+  title_api_key_id               String?  @db.Uuid
+  title_model_id                 String?  @db.Uuid
+
   created_at                     DateTime @default(now()) @db.Timestamptz(6)
   updated_at                     DateTime @default(now()) @db.Timestamptz(6)
+
+  title_api_key                  ai_api_keys? @relation("title_api_key", fields: [title_api_key_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  title_model                    models?      @relation("title_model", fields: [title_model_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
   @@schema("vault")
 }
