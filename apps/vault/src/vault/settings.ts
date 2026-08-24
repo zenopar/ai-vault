@@ -27,6 +27,9 @@ export async function getSettings(sessionToken: string): Promise<SettingsDto> {
     let systemPrompt = DEFAULT_SYSTEM_PROMPT;
     let tokenTiers = DEFAULT_TOKEN_TIERS;
     let maxCostPerRequest = DEFAULT_MAX_COST;
+    let titlePrompt: string | undefined = undefined;
+    const titleApiKeyId = record.title_api_key_id ?? null;
+    const titleModelId = record.title_model_id ?? null;
     const version = record.encryption_version;
     const id = record.id;
 
@@ -87,17 +90,39 @@ export async function getSettings(sessionToken: string): Promise<SettingsDto> {
       }
     }
 
+    if (record.encrypted_title_prompt && record.title_prompt_iv && record.title_prompt_tag) {
+      const aad = buildFieldAad("settings", id, "title_prompt", version);
+      try {
+        const dec = decryptBuffer(
+          {
+            ciphertext: record.encrypted_title_prompt,
+            iv: record.title_prompt_iv,
+            tag: record.title_prompt_tag,
+          },
+          dbKey,
+          aad
+        );
+        titlePrompt = dec.toString("utf-8");
+        dec.fill(0);
+      } catch (e) {
+        console.error("Failed to decrypt title_prompt", e);
+      }
+    }
+
     return {
       id,
       systemPrompt,
       tokenTiers,
       maxCostPerRequest,
+      titlePrompt,
+      titleApiKeyId,
+      titleModelId,
     };
   });
 }
 
 export async function updateSettings(
-  params: { systemPrompt?: string; tokenTiers?: TokenTierDto[]; maxCostPerRequest?: number },
+  params: { systemPrompt?: string; tokenTiers?: TokenTierDto[]; maxCostPerRequest?: number; titlePrompt?: string; titleApiKeyId?: string | null; titleModelId?: string | null; },
   sessionToken: string
 ): Promise<SettingsDto> {
   const currentRecord = await getSettingsRecord();
@@ -145,7 +170,25 @@ export async function updateSettings(
       updateData.max_cost_per_request_tag = enc.tag;
       pt.fill(0);
     }
+
+    if (params.titlePrompt !== undefined) {
+      const aad = buildFieldAad("settings", targetId, "title_prompt", version);
+      const pt = Buffer.from(params.titlePrompt, "utf-8");
+      const enc = encryptBuffer(pt, dbKey, aad);
+      updateData.encrypted_title_prompt = enc.ciphertext;
+      updateData.title_prompt_iv = enc.iv;
+      updateData.title_prompt_tag = enc.tag;
+      pt.fill(0);
+    }
   });
+
+  if (params.titleApiKeyId !== undefined) {
+    updateData.title_api_key_id = params.titleApiKeyId;
+  }
+  
+  if (params.titleModelId !== undefined) {
+    updateData.title_model_id = params.titleModelId;
+  }
 
   if (Object.keys(updateData).length > 0) {
     await upsertSettingsRecord(updateData);

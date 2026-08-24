@@ -13,6 +13,11 @@ export interface SettingsRecord {
   encrypted_max_cost_per_request: string | null;
   max_cost_per_request_iv: string | null;
   max_cost_per_request_tag: string | null;
+  encrypted_title_prompt: string | null;
+  title_prompt_iv: string | null;
+  title_prompt_tag: string | null;
+  title_api_key_id: string | null;
+  title_model_id: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -29,6 +34,13 @@ export interface UpdateSettingsData {
   encrypted_max_cost_per_request?: string | null;
   max_cost_per_request_iv?: string | null;
   max_cost_per_request_tag?: string | null;
+  
+  encrypted_title_prompt?: string | null;
+  title_prompt_iv?: string | null;
+  title_prompt_tag?: string | null;
+  
+  title_api_key_id?: string | null;
+  title_model_id?: string | null;
 }
 
 export async function getSettingsRecord(): Promise<SettingsRecord | null> {
@@ -56,6 +68,13 @@ export async function upsertSettingsRecord(data: UpdateSettingsData): Promise<Se
         ...(data.encrypted_max_cost_per_request !== undefined && { encrypted_max_cost_per_request: data.encrypted_max_cost_per_request }),
         ...(data.max_cost_per_request_iv !== undefined && { max_cost_per_request_iv: data.max_cost_per_request_iv }),
         ...(data.max_cost_per_request_tag !== undefined && { max_cost_per_request_tag: data.max_cost_per_request_tag }),
+
+        ...(data.encrypted_title_prompt !== undefined && { encrypted_title_prompt: data.encrypted_title_prompt }),
+        ...(data.title_prompt_iv !== undefined && { title_prompt_iv: data.title_prompt_iv }),
+        ...(data.title_prompt_tag !== undefined && { title_prompt_tag: data.title_prompt_tag }),
+
+        ...(data.title_api_key_id !== undefined && { title_api_key_id: data.title_api_key_id }),
+        ...(data.title_model_id !== undefined && { title_model_id: data.title_model_id }),
       },
     }) as unknown as Promise<SettingsRecord>;
   } else {
@@ -74,6 +93,13 @@ export async function upsertSettingsRecord(data: UpdateSettingsData): Promise<Se
         encrypted_max_cost_per_request: data.encrypted_max_cost_per_request ?? null,
         max_cost_per_request_iv: data.max_cost_per_request_iv ?? null,
         max_cost_per_request_tag: data.max_cost_per_request_tag ?? null,
+
+        encrypted_title_prompt: data.encrypted_title_prompt ?? null,
+        title_prompt_iv: data.title_prompt_iv ?? null,
+        title_prompt_tag: data.title_prompt_tag ?? null,
+
+        title_api_key_id: data.title_api_key_id ?? null,
+        title_model_id: data.title_model_id ?? null,
       },
     }) as unknown as Promise<SettingsRecord>;
   }
