@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@ai-vault/types": "*",
+    "altcha": "^3.2.2",
+    "altcha-lib": "^2.3.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "katex": "^0.16.47",
