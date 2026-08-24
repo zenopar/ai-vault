@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { ChatMetadata, AiApiKeyMetadata } from "@ai-vault/types";
-import { Button, Badge } from "@/shared/components";
+import { Button, Badge, ConfirmDialog } from "@/shared/components";
 import { lockVaultAction } from "@/features/vault/actions/lock-vault.action";
 import { BarChart2, Key, Settings } from "lucide-react";
 
@@ -34,6 +35,8 @@ export function ChatSidebar({
   keys,
   telemetry,
 }: ChatSidebarProps) {
+  const [chatToDelete, setChatToDelete] = useState<string | null>(null);
+
   const hasTelemetry =
     activeChatId &&
     telemetry &&
@@ -47,6 +50,22 @@ export function ChatSidebar({
 
   return (
     <>
+      <ConfirmDialog
+        isOpen={!!chatToDelete}
+        title="Delete chat"
+        description="Are you sure you want to permanently delete this chat? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        isDestructive={true}
+        onConfirm={() => {
+          if (chatToDelete) {
+            onDeleteChat(chatToDelete);
+            setChatToDelete(null);
+          }
+        }}
+        onCancel={() => setChatToDelete(null)}
+      />
+
       {/* Mobile backdrop */}
       {isOpen && (
         <div
@@ -96,8 +115,8 @@ export function ChatSidebar({
                   key={c.id}
                   onClick={() => onSelectChat(c.id)}
                   className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${isActive
-                      ? "bg-white/[0.08] text-white font-medium"
-                      : "text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.03]"
+                    ? "bg-white/[0.08] text-white font-medium"
+                    : "text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.03]"
                     }`}
                 >
                   <span className="truncate pr-2">{c.title || "untitled"}</span>
@@ -106,7 +125,7 @@ export function ChatSidebar({
                     size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onDeleteChat(c.id);
+                      setChatToDelete(c.id);
                     }}
                     className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 text-xs px-1 py-0 h-auto rounded transition-opacity"
                     title="delete"
