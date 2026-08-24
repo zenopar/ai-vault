@@ -2,19 +2,23 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { SettingsDto, TokenTierDto } from "@ai-vault/types";
+import { SettingsDto, TokenTierDto, AiApiKeyMetadata } from "@ai-vault/types";
 import { updateSettingsAction } from "../actions/settings.action";
 import { Button, Input, Card, ErrorAlert } from "@/shared/components";
 
 interface SettingsDashboardProps {
   initialSettings: SettingsDto;
+  apiKeys: AiApiKeyMetadata[];
 }
 
-export function SettingsDashboard({ initialSettings }: SettingsDashboardProps) {
+export function SettingsDashboard({ initialSettings, apiKeys }: SettingsDashboardProps) {
   const [settings, setSettings] = useState<SettingsDto>(initialSettings);
   const [systemPrompt, setSystemPrompt] = useState(initialSettings.systemPrompt);
   const [maxCostPerRequest, setMaxCostPerRequest] = useState(initialSettings.maxCostPerRequest.toString());
   const [tokenTiers, setTokenTiers] = useState<TokenTierDto[]>(initialSettings.tokenTiers);
+  const [titlePrompt, setTitlePrompt] = useState(initialSettings.titlePrompt || "");
+  const [titleApiKeyId, setTitleApiKeyId] = useState(initialSettings.titleApiKeyId || "");
+  const [titleModelId, setTitleModelId] = useState(initialSettings.titleModelId || "");
   
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -36,6 +40,9 @@ export function SettingsDashboard({ initialSettings }: SettingsDashboardProps) {
         systemPrompt,
         maxCostPerRequest: costNum,
         tokenTiers,
+        titlePrompt,
+        titleApiKeyId: titleApiKeyId || null,
+        titleModelId: titleModelId || null,
       });
 
       if (!res.success || !res.settings) {
@@ -130,6 +137,59 @@ export function SettingsDashboard({ initialSettings }: SettingsDashboardProps) {
                 onChange={(e) => setMaxCostPerRequest(e.target.value)}
                 placeholder="e.g. 0.50"
                 required
+              />
+            </div>
+          </Card>
+
+          <Card className="p-6 sm:p-8 space-y-6">
+            <div className="space-y-1">
+              <h2 className="text-base font-medium text-neutral-100 font-sans">Chat Title Generation</h2>
+              <p className="text-xs text-neutral-500 font-mono">
+                Configure AI for automatic chat title generation.
+              </p>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5 w-full">
+                <label className="text-[13px] font-medium text-neutral-300 font-sans">API Key</label>
+                <select
+                  className="w-full h-10 px-3 bg-[#181920] border border-white/[0.08] rounded-xl text-neutral-100 text-sm focus:outline-none focus:border-white/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  value={titleApiKeyId}
+                  onChange={(e) => {
+                    setTitleApiKeyId(e.target.value);
+                    setTitleModelId("");
+                  }}
+                >
+                  <option value="">None (Use default)</option>
+                  {apiKeys.map((k) => (
+                    <option key={k.id} value={k.id}>{k.name} ({k.provider})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5 w-full">
+                <label className="text-[13px] font-medium text-neutral-300 font-sans">Model</label>
+                <select
+                  className="w-full h-10 px-3 bg-[#181920] border border-white/[0.08] rounded-xl text-neutral-100 text-sm focus:outline-none focus:border-white/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  value={titleModelId}
+                  onChange={(e) => setTitleModelId(e.target.value)}
+                  disabled={!titleApiKeyId}
+                >
+                  <option value="">Select a model</option>
+                  {apiKeys.find(k => k.id === titleApiKeyId)?.models?.map((m) => (
+                    <option key={m.id} value={m.id}>{m.displayName}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-1.5 w-full mt-4">
+              <label className="text-[13px] font-medium text-neutral-300 font-sans">Custom Title Prompt (Optional)</label>
+              <textarea
+                className="w-full h-24 px-3.5 py-2.5 bg-[#181920] border border-white/[0.08] rounded-xl text-neutral-100 placeholder:text-neutral-600 text-sm focus:outline-none focus:border-white/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed resize-y"
+                value={titlePrompt}
+                onChange={(e) => setTitlePrompt(e.target.value)}
+                placeholder="You are a title generator. Generate a very short, concise title (max 4-5 words)..."
               />
             </div>
           </Card>
