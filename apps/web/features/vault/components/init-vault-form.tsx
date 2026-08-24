@@ -6,6 +6,7 @@ import { Button, Input, Card, ErrorAlert } from "@/shared/components";
 
 export function InitVaultForm() {
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -17,6 +18,12 @@ export function InitVaultForm() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      setLoading(false);
+      return;
+    }
 
     const formData = new FormData(e.currentTarget);
     const result = await initVaultAction(formData);
@@ -106,6 +113,16 @@ export function InitVaultForm() {
           placeholder="Create Master Password"
           required
           autoFocus
+          isMono
+        />
+        
+        <Input
+          type="password"
+          name="confirmPassword"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          placeholder="Confirm Master Password"
+          required
           isMono
         />
 
