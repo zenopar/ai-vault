@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   ChatMetadata,
   ChatMessageDto,
@@ -57,7 +57,7 @@ export function ChatView({
   const [thinkingLevel, setThinkingLevel] = useState<"none" | "low" | "medium" | "high">("medium");
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -65,11 +65,12 @@ export function ChatView({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isPending]);
 
-  const handleSelectChat = (chatId: string) => {
+  const handleSelectChat = async (chatId: string) => {
     if (chatId === activeChatId) return;
     setError(null);
     setActiveChatId(chatId);
-    startTransition(async () => {
+    setIsPending(true);
+    try {
       const res = await getChatMessagesAction(chatId);
       if (res.success && res.data) {
         setMessages(res.data.messages || []);
@@ -79,7 +80,9 @@ export function ChatView({
       } else {
         setError(res.error || "Failed to load chat.");
       }
-    });
+    } finally {
+      setIsPending(false);
+    }
     if (window.innerWidth < 768) setSidebarOpen(false);
   };
 
@@ -90,8 +93,9 @@ export function ChatView({
     if (window.innerWidth < 768) setSidebarOpen(false);
   };
 
-  const handleDeleteChat = (chatId: string) => {
-    startTransition(async () => {
+  const handleDeleteChat = async (chatId: string) => {
+    setIsPending(true);
+    try {
       const res = await deleteChatAction(chatId);
       if (res.success) {
         setChats((prev) => prev.filter((c) => c.id !== chatId));
@@ -99,10 +103,12 @@ export function ChatView({
       } else {
         setError(res.error || "Failed to delete chat.");
       }
-    });
+    } finally {
+      setIsPending(false);
+    }
   };
 
-  const handleSendMessage = (messageText: string) => {
+  const handleSendMessage = async (messageText: string) => {
     const trimmed = messageText.trim();
     if (!trimmed || isPending) return;
     setError(null);
@@ -129,7 +135,8 @@ export function ChatView({
     formData.append("model", selectedModel);
     formData.append("thinkingLevel", thinkingLevel);
 
-    startTransition(async () => {
+    setIsPending(true);
+    try {
       const res = await sendMessageAction(formData);
       if (!res.success || !res.data) {
         setError(res.error || "Failed to process message.");
@@ -148,7 +155,9 @@ export function ChatView({
 
       setActiveChatId(chat.id);
       setMessages((prev) => [...prev.filter((m) => m.id !== tempUserMsg.id), userMessage, assistantMessage]);
-    });
+    } finally {
+      setIsPending(false);
+    }
   };
 
   const totalInputTokens = messages.reduce((acc, m) => acc + (m.inputTokens || 0), 0);
