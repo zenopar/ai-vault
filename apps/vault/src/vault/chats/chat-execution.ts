@@ -146,7 +146,7 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
   } else {
     chat = await createChat(
       {
-        title: deriveTitleFromPrompt(trimmedMessage),
+        title: await deriveTitleFromPrompt(trimmedMessage, params.sessionToken),
         metadata: { provider: params.provider || null, model: params.model || null },
       },
       params.sessionToken

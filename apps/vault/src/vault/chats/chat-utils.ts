@@ -1,7 +1,10 @@
-import { vaultState } from "../state.js";
-import { VaultLockedError, buildFieldAad } from "../keys.js";
+import { buildFieldAad } from "../keys.js";
 import { decryptBuffer } from "../crypto.js";
 import type { ChatRecord } from "../../db/repository/chats.repository.js";
+import { getSettings } from "../settings.js";
+import { executeAiCompletion } from "../ai/ai-provider.js";
+import { getApiKeyRecordById } from "../../db/repository/keys.repository.js";
+import { getModelById } from "../../db/repository/models.repository.js";
 
 // === 1. STATE & VALIDATION ===
 
@@ -199,9 +202,45 @@ export function decryptChatTitle(record: ChatRecord, dbKey: Buffer, fallbackToUn
 /**
  * Derives a clean, concise chat title from the first prompt.
  */
-export function deriveTitleFromPrompt(prompt: string): string {
+export async function deriveTitleFromPrompt(prompt: string, sessionToken: string): Promise<string> {
   const firstLine = prompt.trim().split("\n")[0].trim();
-  if (!firstLine) return "New Chat";
-  if (firstLine.length <= 40) return firstLine;
-  return firstLine.substring(0, 37).trim() + "...";
+  const defaultFallback = () => {
+    if (!firstLine) return "New Chat";
+    if (firstLine.length <= 40) return firstLine;
+    return firstLine.substring(0, 37).trim() + "...";
+  };
+
+  try {
+    const settings = await getSettings(sessionToken);
+    if (settings.titleApiKeyId && settings.titleModelId) {
+      const apiKey = await getApiKeyRecordById(settings.titleApiKeyId);
+      const model = await getModelById(settings.titleModelId);
+
+      if (apiKey && model) {
+        const titlePrompt = settings.titlePrompt?.trim() || "You are a title generator. Generate a very short, concise title (max 4-5 words) for the following chat prompt. Reply ONLY with the title, without quotes or extra text.";
+
+        const aiResult = await executeAiCompletion({
+          messages: [
+            { role: "system", content: titlePrompt },
+            { role: "user", content: prompt }
+          ],
+          provider: apiKey.provider,
+          model: model.name,
+          sessionToken,
+          thinkingLevel: "none",
+        });
+
+        if (aiResult.content) {
+          const generatedTitle = aiResult.content.trim().replace(/^["']|["']$/g, "");
+          if (generatedTitle) {
+            return generatedTitle;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Failed to generate title with AI, falling back to default:", e);
+  }
+
+  return defaultFallback();
 }
