@@ -5,4 +5,5 @@ export * from "./dropdown-select";
 export * from "./card";
 export * from "./error-alert";
 export * from "./badge";
+export * from "./confirm-dialog";
 
