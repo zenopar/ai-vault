@@ -290,9 +290,14 @@ async function callOpenAiCompatible(
 ): Promise<{ text: string; inputTokens?: number; outputTokens?: number; thoughtTokens?: number; thinkingLevel?: string }> {
   const payload: Record<string, any> = {
     model,
-    max_tokens: maxTokens,
     messages: messages.map((m) => ({ role: m.role, content: m.content })),
   };
+
+  if (model.startsWith("o1") || model.startsWith("o3") || model.includes("gpt-5")) {
+    payload.max_completion_tokens = maxTokens;
+  } else {
+    payload.max_tokens = maxTokens;
+  }
 
   if (thinkingLevel && thinkingLevel !== "none") {
     payload.reasoning_effort = thinkingLevel;
@@ -310,7 +315,7 @@ async function callOpenAiCompatible(
   if (!res.ok) {
     const errorText = await res.text();
     console.error(`[AI provider] API error (${res.status}):`, errorText);
-    throw new Error(`AI request failed (${res.status}). Please try again.`);
+    throw new Error(`AI request failed (${res.status}): ${errorText}`);
   }
 
   const data = (await res.json()) as {
