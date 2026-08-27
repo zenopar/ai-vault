@@ -25,6 +25,8 @@ import { getAnalyticsSummary } from "./vault/analytics/index.js";
 import { getSettings, updateSettings } from "./vault/settings.js";
 import { NoActiveApiKeyError, UnsupportedProviderError } from "./vault/ai/ai-provider.js";
 import { vaultState } from "./vault/state.js";
+import { authRateLimiter } from "./vault/rate-limiter.js";
+import { z } from "zod";
 import {
   VaultStatusResponse,
   VaultInitResponse,
@@ -101,19 +103,26 @@ function isLoopbackAddress(ip?: string): boolean {
   return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1" || ip.startsWith("127.");
 }
 
-function resolveAllowedOrigin(req: IncomingMessage): string {
+function resolveAllowedOrigin(req: IncomingMessage): string | null {
   const origin = req.headers["origin"];
-  if (origin && ALLOWED_ORIGIN_PATTERN.test(origin)) {
+  if (!origin) return "http://localhost:3000"; // For non-browser or same-origin direct requests
+  if (ALLOWED_ORIGIN_PATTERN.test(origin)) {
     return origin;
   }
-  return "http://localhost:3000";
+  return null;
 }
 
-function setCorsHeaders(res: ServerResponse, origin: string): void {
+function setSecurityHeaders(res: ServerResponse, origin: string): void {
   res.setHeader("Access-Control-Allow-Origin", origin);
   res.setHeader("Vary", "Origin");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-vault-secret, x-session-token");
+  
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-XSS-Protection", "0");
+  res.setHeader("Strict-Transport-Security", "max-age=15552000; includeSubDomains");
+  res.setHeader("Content-Security-Policy", "default-src 'self';base-uri 'self';font-src 'self' https: data:;form-action 'self';frame-ancestors 'none';img-src 'self' data:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' https: 'unsafe-inline';upgrade-insecure-requests");
 }
 
 function sendJson<T = unknown>(res: ServerResponse, statusCode: number, data: T) {
@@ -179,9 +188,13 @@ export function createVaultHttpServer() {
     const pathname = url.pathname;
     const method = req.method?.toUpperCase();
 
-    // Set CORS headers for every request based on Origin
+    // Set Security & CORS headers for every request based on Origin
     const corsOrigin = resolveAllowedOrigin(req);
-    setCorsHeaders(res, corsOrigin);
+    if (corsOrigin === null) {
+      sendJson(res, 403, { error: "Forbidden: Invalid Origin" });
+      return;
+    }
+    setSecurityHeaders(res, corsOrigin);
 
     // 1. Preflight OPTIONS
     if (method === "OPTIONS") {
@@ -212,26 +225,42 @@ export function createVaultHttpServer() {
 
       // 5. Initialize Vault
       if (method === "POST" && pathname === "/init") {
-        const body = await readJsonBody<{ masterPassword?: string }>(req);
-        if (!body.masterPassword || typeof body.masterPassword !== "string") {
+        if (remoteIp && authRateLimiter.isRateLimited(remoteIp)) {
+          sendJson(res, 429, { error: "Too many authentication attempts. Please try again later." });
+          return;
+        }
+
+        const schema = z.object({ masterPassword: z.string().min(1) });
+        const parsed = schema.safeParse(await readJsonBody(req));
+        if (!parsed.success) {
           sendJson(res, 400, { error: "masterPassword is required and must be a string." });
           return;
         }
 
-        const result = await initVault(body.masterPassword);
+        if (remoteIp) authRateLimiter.increment(remoteIp);
+        const result = await initVault(parsed.data.masterPassword);
+        if (remoteIp) authRateLimiter.reset(remoteIp);
         sendJson<VaultInitResponse>(res, 200, result);
         return;
       }
 
       // 6. Unlock Vault & create session
       if (method === "POST" && pathname === "/unlock") {
-        const body = await readJsonBody<{ password?: string }>(req);
-        if (!body.password || typeof body.password !== "string") {
+        if (remoteIp && authRateLimiter.isRateLimited(remoteIp)) {
+          sendJson(res, 429, { error: "Too many authentication attempts. Please try again later." });
+          return;
+        }
+
+        const schema = z.object({ password: z.string().min(1) });
+        const parsed = schema.safeParse(await readJsonBody(req));
+        if (!parsed.success) {
           sendJson(res, 400, { error: "password is required and must be a string." });
           return;
         }
 
-        const result = await unlockVault(body.password);
+        if (remoteIp) authRateLimiter.increment(remoteIp);
+        const result = await unlockVault(parsed.data.password);
+        if (remoteIp) authRateLimiter.reset(remoteIp);
         sendJson<VaultUnlockResponse>(res, 200, result);
         return;
       }
