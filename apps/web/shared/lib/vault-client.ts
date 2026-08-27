@@ -1,4 +1,5 @@
 import "server-only";
+import http from "node:http";
 
 export interface VaultResponse<T = unknown> {
   error?: string;
@@ -19,7 +20,7 @@ export class VaultApiClient {
     return process.env.VAULT_IPC_SECRET || "";
   }
 
-  private static buildHeaders(options?: VaultRequestOptions): HeadersInit {
+  private static buildHeaders(options?: VaultRequestOptions): Record<string, string> {
     const headers: Record<string, string> = {
       "x-vault-secret": this.ipcSecret,
       "Content-Type": "application/json",
@@ -33,28 +34,71 @@ export class VaultApiClient {
   }
 
   /**
-   * Sends a GET request to the specified path on the Vault service.
-   * Automatically attaches the IPC secret and optional session token for authentication.
+   * Universal internal request handler that supports both TCP and Unix Sockets.
    */
-  static async sendGetRequest<T>(path: string, options?: VaultRequestOptions): Promise<VaultResponse<T>> {
-    try {
-      const response = await fetch(`${this.vaultUrl}${path}`, {
-        method: "GET",
-        headers: this.buildHeaders(options),
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Vault error ${response.status}: ${errorText}`);
+  private static request<T>(
+    method: string, 
+    path: string, 
+    body?: unknown, 
+    options?: VaultRequestOptions
+  ): Promise<VaultResponse<T>> {
+    return new Promise((resolve) => {
+      const isUnixSocket = this.vaultUrl.startsWith("unix://");
+      
+      let reqOptions: http.RequestOptions;
+      if (isUnixSocket) {
+        // Handle communication via Unix Socket file
+        reqOptions = {
+          socketPath: this.vaultUrl.replace("unix://", ""),
+          path: path,
+          method: method,
+          headers: this.buildHeaders(options)
+        };
+      } else {
+        // Fallback for local development (http://127.0.0.1:4000)
+        const url = new URL(path, this.vaultUrl);
+        reqOptions = {
+          hostname: url.hostname,
+          port: url.port,
+          path: url.pathname + url.search,
+          method: method,
+          headers: this.buildHeaders(options)
+        };
       }
 
-      const data = (await response.json()) as T;
-      return { data };
-    } catch (error) {
-      console.error(`GET request failed to ${path}:`, error);
-      return { error: "Vault connection error", errorDetails: error instanceof Error ? error.message : "Unknown error" };
-    }
+      const req = http.request(reqOptions, (res) => {
+        let responseData = "";
+        res.on("data", (chunk) => { responseData += chunk; });
+        res.on("end", () => {
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            try {
+              // Some responses might not be JSON (e.g. empty 204), but we always send json.
+              const data = responseData ? JSON.parse(responseData) : {};
+              resolve({ data });
+            } catch (e) {
+              resolve({ error: "Invalid JSON from Vault", errorDetails: responseData });
+            }
+          } else {
+            resolve({ error: `Vault error ${res.statusCode}`, errorDetails: responseData });
+          }
+        });
+      });
+
+      req.on("error", (error) => {
+        console.error(`${method} request failed to ${path}:`, error);
+        resolve({ error: "Vault connection error", errorDetails: error.message });
+      });
+
+      if (body) {
+        req.write(JSON.stringify(body));
+      }
+      
+      req.end();
+    });
+  }
+
+  static async sendGetRequest<T>(path: string, options?: VaultRequestOptions): Promise<VaultResponse<T>> {
+    return this.request<T>("GET", path, undefined, options);
   }
 
   static async sendPostRequest<T, B = Record<string, unknown>>(
@@ -62,25 +106,7 @@ export class VaultApiClient {
     body: B, 
     options?: VaultRequestOptions
   ): Promise<VaultResponse<T>> {
-    try {
-      const response = await fetch(`${this.vaultUrl}${path}`, {
-        method: "POST",
-        headers: this.buildHeaders(options),
-        body: JSON.stringify(body),
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Vault error ${response.status}: ${errorText}`);
-      }
-
-      const data = (await response.json()) as T;
-      return { data };
-    } catch (error) {
-      console.error(`POST request failed to ${path}:`, error);
-      return { error: "Vault connection error", errorDetails: error instanceof Error ? error.message : "Unknown error" };
-    }
+    return this.request<T>("POST", path, body, options);
   }
 
   static async sendPutRequest<T, B = Record<string, unknown>>(
@@ -88,45 +114,10 @@ export class VaultApiClient {
     body: B, 
     options?: VaultRequestOptions
   ): Promise<VaultResponse<T>> {
-    try {
-      const response = await fetch(`${this.vaultUrl}${path}`, {
-        method: "PUT",
-        headers: this.buildHeaders(options),
-        body: JSON.stringify(body),
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Vault error ${response.status}: ${errorText}`);
-      }
-
-      const data = (await response.json()) as T;
-      return { data };
-    } catch (error) {
-      console.error(`PUT request failed to ${path}:`, error);
-      return { error: "Vault connection error", errorDetails: error instanceof Error ? error.message : "Unknown error" };
-    }
+    return this.request<T>("PUT", path, body, options);
   }
 
   static async sendDeleteRequest<T>(path: string, options?: VaultRequestOptions): Promise<VaultResponse<T>> {
-    try {
-      const response = await fetch(`${this.vaultUrl}${path}`, {
-        method: "DELETE",
-        headers: this.buildHeaders(options),
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Vault error ${response.status}: ${errorText}`);
-      }
-
-      const data = (await response.json()) as T;
-      return { data };
-    } catch (error) {
-      console.error(`DELETE request failed to ${path}:`, error);
-      return { error: "Vault connection error", errorDetails: error instanceof Error ? error.message : "Unknown error" };
-    }
+    return this.request<T>("DELETE", path, undefined, options);
   }
 }

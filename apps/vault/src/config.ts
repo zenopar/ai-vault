@@ -14,6 +14,7 @@ function resolveIpcSecret(): string {
 export const config = {
   port: parseInt(process.env["PORT"] || "4000", 10),
   host: "127.0.0.1",
+  socketPath: process.env["VAULT_SOCKET_PATH"], // Optional Unix Socket path
   databaseUrl: process.env["DATABASE_URL"] || "",
   ipcSecret: resolveIpcSecret(),
   nodeEnv: process.env["NODE_ENV"] || "development",

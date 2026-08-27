@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import crypto from "node:crypto";
+import fs from "node:fs";
 import { config } from "./config.js";
 import { getVaultStatus } from "./vault/status.js";
 import { initVault, VaultAlreadyInitializedError } from "./vault/init.js";
@@ -578,10 +579,43 @@ export function createVaultHttpServer() {
 
 export function startServer() {
   const server = createVaultHttpServer();
-  server.listen(config.port, config.host, () => {
-    console.log(`Vault Service running at http://${config.host}:${config.port}`);
-    console.log(`Status endpoint: http://${config.host}:${config.port}/status`);
-  });
+
+  if (config.socketPath) {
+    const socketPath = config.socketPath;
+    // Remove old socket if it exists to avoid EADDRINUSE error
+    if (fs.existsSync(socketPath)) {
+      fs.rmSync(socketPath, { force: true });
+    }
+    server.listen(socketPath, () => {
+      // Set socket permissions: allow read/write (only for containers with IPC volume)
+      fs.chmodSync(socketPath, "0666");
+      console.log(`Vault Service listening on Unix Socket: ${socketPath}`);
+    });
+  } else {
+    server.listen(config.port, config.host, () => {
+      console.log(`Vault Service running at http://${config.host}:${config.port}`);
+      console.log(`Status endpoint: http://${config.host}:${config.port}/status`);
+    });
+  }
+
+  // Graceful shutdown & Security Wiping
+  const shutdown = () => {
+    console.log("Termination signal received. Wiping sensitive data from memory...");
+    vaultState.lock(); // Complete .fill(0) for all Buffer keys
+    server.close(() => {
+      console.log("Server terminated successfully.");
+      process.exit(0);
+    });
+    // Fallback force exit after 5 seconds
+    setTimeout(() => {
+      console.error("Forced termination (timeout).");
+      process.exit(1);
+    }, 5000).unref();
+  };
+
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
+
   return server;
 }
 
