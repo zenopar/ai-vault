@@ -84,6 +84,7 @@ const TEST_MOCK_MODELS = [
 
 export function createInMemoryPrismaMock() {
   let vaultConfigRecord: any = null;
+  let settingsRecord: any = null;
   const apiKeysMap = new Map<string, any>();
   const chatsMap = new Map<string, any>();
   const messagesMap = new Map<string, any>();
@@ -146,6 +147,22 @@ export function createInMemoryPrismaMock() {
       }),
       deleteMany: vi.fn(async () => {
         vaultConfigRecord = null;
+        return { count: 1 };
+      }),
+    },
+    settings: {
+      findFirst: vi.fn(async () => settingsRecord),
+      create: vi.fn(async ({ data }: any) => {
+        settingsRecord = { ...data, id: data.id || "mock-settings-id", created_at: new Date(), updated_at: new Date() };
+        return { ...settingsRecord };
+      }),
+      update: vi.fn(async ({ data }: any) => {
+        if (!settingsRecord) throw new Error("Record to update does not exist.");
+        settingsRecord = { ...settingsRecord, ...data, updated_at: new Date() };
+        return { ...settingsRecord };
+      }),
+      deleteMany: vi.fn(async () => {
+        settingsRecord = null;
         return { count: 1 };
       }),
     },
@@ -393,6 +410,7 @@ export function createInMemoryPrismaMock() {
     mockPrisma,
     reset: () => {
       vaultConfigRecord = null;
+      settingsRecord = null;
       apiKeysMap.clear();
       chatsMap.clear();
       messagesMap.clear();
