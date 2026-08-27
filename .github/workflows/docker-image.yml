@@ -26,6 +26,8 @@ jobs:
         run: npm run db:generate
         
       - name: Run tests
+        env:
+          VAULT_IPC_SECRET: dummy_test_secret_for_ci
         run: npm test
 
   build-and-push:
