@@ -65,14 +65,15 @@ async function calculateDynamicTokens(provider: string, model: string, tokenTier
       }
 
       if (outputCost !== null) {
-        const sortedTiers = [...tokenTiers].sort((a, b) => a.max_cost - b.max_cost);
-        for (const tier of sortedTiers) {
-           if (outputCost <= tier.max_cost) {
-             maxOutputTokens = tier.tokens;
-             break;
-           }
+        if (tokenTiers && tokenTiers.length > 0) {
+          const sortedTiers = [...tokenTiers].sort((a, b) => a.max_cost - b.max_cost);
+          for (const tier of sortedTiers) {
+             if (outputCost <= tier.max_cost) {
+               maxOutputTokens = tier.tokens;
+               break;
+             }
+          }
         }
-        if (!maxOutputTokens) maxOutputTokens = 800;
       }
 
       maxTokens = Math.min(maxTokens, contextLimit);
@@ -170,7 +171,7 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
     const promptContext = buildPromptContext(existingMessages, trimmedMessage, maxTokens);
 
     // 1.5 Enforce Max Cost
-    let finalMaxOutputTokens = maxOutputTokens || 800;
+    let finalMaxOutputTokens = maxOutputTokens;
 
     if (inputPrice !== undefined && outputPrice !== undefined && settings.maxCostPerRequest !== undefined) {
       const estimatedInputTokens = promptContext.reduce((acc, msg) => acc + Math.ceil(msg.content.length / 4), 0);
@@ -183,13 +184,17 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
       const remainingBudget = settings.maxCostPerRequest - estInCost;
       const affordableOutputTokens = Math.floor((remainingBudget / outputPrice) * 1000000);
 
-      if (affordableOutputTokens < finalMaxOutputTokens) {
+      if (finalMaxOutputTokens === undefined || affordableOutputTokens < finalMaxOutputTokens) {
         finalMaxOutputTokens = affordableOutputTokens;
       }
 
       if (finalMaxOutputTokens < 50) {
         throw new Error(`Request blocked: Remaining budget after input cost only affords ${finalMaxOutputTokens} output tokens. Please shorten your prompt or increase the cost limit.`);
       }
+    }
+
+    if (!finalMaxOutputTokens) {
+      finalMaxOutputTokens = 8192;
     }
 
     // 2. Encrypt and store user message
