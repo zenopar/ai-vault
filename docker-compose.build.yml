@@ -1,0 +1,19 @@
+services:
+  db:
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  migrator:
+    build:
+      context: .
+      dockerfile: apps/vault/Dockerfile
+
+  vault:
+    build:
+      context: .
+      dockerfile: apps/vault/Dockerfile
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile

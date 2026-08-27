@@ -1,0 +1,131 @@
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    networks:
+      - db_internal
+    environment:
+      POSTGRES_USER: ${DB_USER:-vault}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-supersecret}
+      POSTGRES_DB: ${DB_NAME:-ai_vault}
+    volumes:
+      - db_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-vault} -d ${DB_NAME:-ai_vault}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ipc: none
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    tmpfs:
+      - /var/run/postgresql
+    mem_limit: 512m
+    memswap_limit: 512m
+    mem_swappiness: 0
+    pids_limit: 100
+    cpus: "1.0"
+
+  migrator:
+    image: ghcr.io/zenopar/ai-vault-vault:latest
+    restart: "no"
+    networks:
+      - db_internal
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER:-vault}:${DB_PASSWORD:-supersecret}@db:5432/${DB_NAME:-ai_vault}
+    working_dir: /app/apps/vault
+    command: ["../../node_modules/.bin/prisma", "migrate", "deploy"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  vault:
+    image: ghcr.io/zenopar/ai-vault-vault:latest
+    restart: unless-stopped
+    init: true # Critical for SIGTERM handling and memory wiping!
+    networks:
+      - db_internal
+      - outbound_only
+    environment:
+      - NODE_ENV=production
+      - VAULT_SOCKET_PATH=/var/run/ipc/vault.sock
+      - DATABASE_URL=postgresql://${DB_USER:-vault}:${DB_PASSWORD:-supersecret}@db:5432/${DB_NAME:-ai_vault}
+      - NODE_OPTIONS=--max-old-space-size=256
+      - VAULT_IPC_SECRET=${VAULT_IPC_SECRET}
+    volumes:
+      # RAM disk (tmpfs) for sharing IPC socket
+      - ipc_socket:/var/run/ipc
+    ipc: none
+    depends_on:
+      db:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 512m
+    memswap_limit: 512m
+    mem_swappiness: 0
+    pids_limit: 100
+    cpus: "1.0"
+
+  web:
+    image: ghcr.io/zenopar/ai-vault-web:latest
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      - web_offline
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - VAULT_URL=unix:///var/run/ipc/vault.sock
+      - VAULT_IPC_SECRET=${VAULT_IPC_SECRET}
+      - ALTCHA_SECRET=${ALTCHA_SECRET}
+    volumes:
+      # Web has ONLY READ/WRITE access to the socket, it must not create it
+      - ipc_socket:/var/run/ipc:ro
+    ipc: none
+    depends_on:
+      - vault
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/apps/web/.next/cache
+      - /app/.next/cache
+    mem_limit: 512m
+    memswap_limit: 512m
+    mem_swappiness: 0
+    pids_limit: 100
+    cpus: "1.0"
+
+volumes:
+  db_data:
+  ipc_socket:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+
+networks:
+  db_internal:
+    internal: true
+  web_offline:
+    internal: true
+  outbound_only:

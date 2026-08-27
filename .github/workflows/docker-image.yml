@@ -1,0 +1,111 @@
+name: Build & Push to Registry
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Generate Prisma Client
+        run: npm run db:generate
+        
+      - name: Run tests
+        run: npm test
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: write
+      # Permissions required for SBOM and Provenance attestations (Supply Chain Security)
+      attestations: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set lower case owner name
+        run: echo "REPO_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+
+      # -----------------------------------------------------------------
+      # 1. AI Vault - WEB
+      # -----------------------------------------------------------------
+      - name: Extract metadata for Web
+        id: meta-web
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ env.REPO_OWNER }}/ai-vault-web
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' }}
+
+      - name: Build and push Web Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          tags: ${{ steps.meta-web.outputs.tags }}
+          labels: ${{ steps.meta-web.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Top Safe: Supply Chain Security features
+          provenance: true
+          sbom: true
+
+      # -----------------------------------------------------------------
+      # 2. AI Vault - VAULT (Backend)
+      # -----------------------------------------------------------------
+      - name: Extract metadata for Vault
+        id: meta-vault
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ env.REPO_OWNER }}/ai-vault-vault
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' }}
+
+      - name: Build and push Vault Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/vault/Dockerfile
+          push: true
+          tags: ${{ steps.meta-vault.outputs.tags }}
+          labels: ${{ steps.meta-vault.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Top Safe: Supply Chain Security features
+          provenance: true
+          sbom: true
