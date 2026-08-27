@@ -85,8 +85,6 @@ services:
     image: ghcr.io/zenopar/ai-vault-web:latest
     restart: unless-stopped
     init: true
-    ports:
-      - "127.0.0.1:3000:3000"
     networks:
       - web_offline
     environment:
@@ -115,6 +113,16 @@ services:
     mem_swappiness: 0
     pids_limit: 100
     cpus: "1.0"
+
+  proxy:
+    image: caddy:alpine
+    restart: unless-stopped
+    command: caddy reverse-proxy --from http://0.0.0.0:3000 --to http://web:3000
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      - web_offline
+      - default
 
 volumes:
   db_data:
