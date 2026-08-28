@@ -117,7 +117,7 @@ services:
   proxy:
     image: caddy:alpine
     restart: unless-stopped
-    command: caddy reverse-proxy --from http://0.0.0.0:3000 --to http://web:3000
+    command: caddy reverse-proxy --from http://:3000 --to http://web:3000
     ports:
       - "127.0.0.1:3000:3000"
     networks:
