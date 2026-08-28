@@ -16,6 +16,45 @@ There are no user registrations or complex multi-tenant architectures—just a s
 
 ---
 
+## Installation & Usage
+
+### Prerequisites
+Before you begin, ensure you have the following installed on your system:
+- **[Docker](https://docs.docker.com/get-docker/)** (Docker Desktop for Windows/Mac, or Docker Engine with the Compose plugin for Linux)
+- **[Git](https://git-scm.com/downloads)** (to clone the repository)
+
+### Quick Start
+
+The most secure and recommended way to deploy AI Vault is using Docker Compose.
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/zenopar/ai-vault.git
+   cd ai-vault
+   ```
+
+2. **Configure environment variables:**
+   Copy the example environment file:
+   ```bash
+   cp .env.example .env
+   ```
+   Open `.env` and set the required variables. Generate strong random secrets for `VAULT_IPC_SECRET` and `ALTCHA_SECRET` (e.g., using `openssl rand -hex 32`). Also, provide secure database credentials.
+
+3. **Start the platform:**
+   To start the platform using the pre-built Docker images, first pull the latest images and then start the services:
+   ```bash
+   docker compose pull
+   docker compose up -d
+   ```
+   *(Optional: If you prefer to build the images locally from source, you can run `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build` instead).*
+
+   > **Note:** If you start the services *before* configuring your `.env` file, the PostgreSQL database will initialize with default credentials. If you change the database credentials later, you must delete the existing database volume by running `docker compose down -v` before starting it again.
+
+4. **Access the application:**
+   Navigate to `http://localhost:3000` in your browser. On your first visit, you will be prompted to create your Master Password and unlock the vault.
+
+---
+
 ## Architecture & Security Design
 
 To prevent a vulnerability in the web framework from compromising the cryptographic keys, the architecture strictly decouples the web layer from the cryptographic runtime:
