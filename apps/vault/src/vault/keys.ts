@@ -37,6 +37,7 @@ export async function addApiKey(
     provider: string;
     name: string;
     apiKey: string;
+    baseUrl?: string;
   },
   sessionToken: string
 ): Promise<AiApiKeyMetadata> {
@@ -53,6 +54,19 @@ export async function addApiKey(
     plaintextBuffer.fill(0);
   }
 
+  let encryptedBaseUrl: EncryptedData | undefined;
+  if (params.baseUrl) {
+    const baseUrlBuffer = Buffer.from(params.baseUrl.trim(), "utf-8");
+    const baseUrlAad = buildFieldAad("ai_api_key", recordId, "baseUrl", 1);
+    try {
+      encryptedBaseUrl = await vaultState.withSecretsKey(sessionToken, (secretsKey) => {
+        return encryptBuffer(baseUrlBuffer, secretsKey, baseUrlAad);
+      });
+    } finally {
+      baseUrlBuffer.fill(0);
+    }
+  }
+
   const record = await createApiKeyRecord({
     id: recordId,
     provider: params.provider.trim().toLowerCase(),
@@ -60,9 +74,34 @@ export async function addApiKey(
     encrypted_key: encrypted.ciphertext,
     iv: encrypted.iv,
     tag: encrypted.tag,
+    encrypted_base_url: encryptedBaseUrl?.ciphertext,
+    base_url_iv: encryptedBaseUrl?.iv,
+    base_url_tag: encryptedBaseUrl?.tag,
   });
 
   const models = await listModels(record.provider);
+
+  let decryptedBaseUrl: string | undefined = undefined;
+  if (record.encrypted_base_url && record.base_url_iv && record.base_url_tag) {
+    const baseUrlAad = buildFieldAad("ai_api_key", record.id, "baseUrl", 1);
+    let baseUrlBuffer: Buffer | null = null;
+    try {
+      baseUrlBuffer = await vaultState.withSecretsKey(sessionToken, (secretsKey) => {
+        return decryptBuffer(
+          {
+            ciphertext: record.encrypted_base_url!,
+            iv: record.base_url_iv!,
+            tag: record.base_url_tag!,
+          },
+          secretsKey,
+          baseUrlAad
+        );
+      });
+      decryptedBaseUrl = baseUrlBuffer.toString("utf-8");
+    } finally {
+      if (baseUrlBuffer) baseUrlBuffer.fill(0);
+    }
+  }
 
   return {
     id: record.id,
@@ -70,6 +109,7 @@ export async function addApiKey(
     name: record.name,
     isActive: record.is_active,
     models,
+    baseUrl: decryptedBaseUrl,
     createdAt: record.created_at.toISOString(),
     updatedAt: record.updated_at.toISOString(),
   };
@@ -87,6 +127,7 @@ export async function listApiKeys(): Promise<AiApiKeyMetadata[]> {
     provider: r.provider,
     name: r.name,
     isActive: r.is_active,
+    baseUrl: undefined, // base_url is encrypted and not exposed in list
     models: allModels.filter((m) => m.provider.toLowerCase() === r.provider.toLowerCase()),
     createdAt: r.created_at.toISOString(),
     updatedAt: r.updated_at.toISOString(),
@@ -96,7 +137,7 @@ export async function listApiKeys(): Promise<AiApiKeyMetadata[]> {
 /**
  * Decrypts an AI API key using the transient HKDF secrets key and verifies AAD integrity.
  */
-export async function getDecryptedApiKey(id: string, sessionToken: string): Promise<string> {
+export async function getDecryptedApiKey(id: string, sessionToken: string): Promise<{ apiKey: string; baseUrl?: string }> {
   const record = await getApiKeyRecordById(id);
   if (!record) {
     throw new ApiKeyNotFoundError();
@@ -117,7 +158,29 @@ export async function getDecryptedApiKey(id: string, sessionToken: string): Prom
   });
 
   try {
-    return decryptedBuffer.toString("utf-8");
+    const decryptedKeyStr = decryptedBuffer.toString("utf-8");
+    let decryptedBaseUrl: string | undefined = undefined;
+    if (record.encrypted_base_url && record.base_url_iv && record.base_url_tag) {
+      const baseUrlAad = buildFieldAad("ai_api_key", record.id, "baseUrl", 1);
+      let baseUrlBuffer: Buffer | null = null;
+      try {
+        baseUrlBuffer = await vaultState.withSecretsKey(sessionToken, (secretsKey) => {
+          return decryptBuffer(
+            {
+              ciphertext: record.encrypted_base_url!,
+              iv: record.base_url_iv!,
+              tag: record.base_url_tag!,
+            },
+            secretsKey,
+            baseUrlAad
+          );
+        });
+        decryptedBaseUrl = baseUrlBuffer.toString("utf-8");
+      } finally {
+        if (baseUrlBuffer) baseUrlBuffer.fill(0);
+      }
+    }
+    return { apiKey: decryptedKeyStr, baseUrl: decryptedBaseUrl };
   } finally {
     decryptedBuffer.fill(0);
   }

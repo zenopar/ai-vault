@@ -9,6 +9,9 @@ export interface CreateApiKeyData {
   iv: string;
   tag: string;
   is_active?: boolean;
+  encrypted_base_url?: string;
+  base_url_iv?: string;
+  base_url_tag?: string;
 }
 
 export interface ApiKeyRecord {
@@ -19,6 +22,9 @@ export interface ApiKeyRecord {
   iv: string;
   tag: string;
   is_active: boolean;
+  encrypted_base_url: string | null;
+  base_url_iv: string | null;
+  base_url_tag: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -34,6 +40,9 @@ export async function createApiKeyRecord(data: CreateApiKeyData) {
       iv: data.iv,
       tag: data.tag,
       is_active: data.is_active ?? true,
+      encrypted_base_url: data.encrypted_base_url ?? null,
+      base_url_iv: data.base_url_iv ?? null,
+      base_url_tag: data.base_url_tag ?? null,
     },
   });
 }

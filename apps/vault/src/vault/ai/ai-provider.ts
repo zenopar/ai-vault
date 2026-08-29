@@ -75,7 +75,7 @@ export async function executeAiCompletion(params: AiExecutionParams): Promise<Ai
   }
 
   const provider = selectedKeyRecord.provider.toLowerCase();
-  const apiKey = await getDecryptedApiKey(selectedKeyRecord.id, params.sessionToken);
+  const { apiKey, baseUrl: decryptedBaseUrl } = await getDecryptedApiKey(selectedKeyRecord.id, params.sessionToken);
 
   let model = params.model;
   let thinkingLevel: string = params.thinkingLevel !== undefined ? params.thinkingLevel : (provider === "google" ? "medium" : "none");
@@ -98,6 +98,11 @@ export async function executeAiCompletion(params: AiExecutionParams): Promise<Ai
   } else if (provider === "openai") {
     model = model || "gpt-5.6-sol";
     result = await callOpenAiCompatible("https://api.openai.com/v1/chat/completions", apiKey, model, mergedMessages, params.maxOutputTokens, thinkingLevel);
+  } else if (provider === "local" || provider === "custom") {
+    const defaultUrl = provider === "local" ? "http://localhost:11434/v1/chat/completions" : "http://localhost/v1/chat/completions";
+    const baseUrl = decryptedBaseUrl || defaultUrl;
+    model = model || "local-model";
+    result = await callOpenAiCompatible(baseUrl, apiKey, model, mergedMessages, params.maxOutputTokens, thinkingLevel);
   } else {
     throw new UnsupportedProviderError(provider);
   }
