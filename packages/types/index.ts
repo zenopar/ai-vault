@@ -41,12 +41,26 @@ export interface ListModelsResponse {
   error?: string;
 }
 
+export interface AddModelRequest {
+  provider: string;
+  name: string;
+  displayName: string;
+  description?: string;
+}
+
+export interface AddModelResponse {
+  success: boolean;
+  model?: AiModelMetadata;
+  error?: string;
+}
+
 export interface AiApiKeyMetadata {
   id: string;
   provider: string;
   name: string;
   isActive: boolean;
   models?: AiModelMetadata[];
+  baseUrl?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -55,6 +69,7 @@ export interface AddApiKeyRequest {
   provider: string;
   name: string;
   apiKey: string;
+  baseUrl?: string;
 }
 
 export interface AddApiKeyResponse {

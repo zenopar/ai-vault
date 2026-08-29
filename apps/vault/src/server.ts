@@ -12,7 +12,7 @@ import {
   VaultLockedError,
   ApiKeyNotFoundError
 } from "./vault/keys.js";
-import { listModels } from "./vault/models.js";
+import { listModels, addModel } from "./vault/models.js";
 import {
   listChats,
   getChat,
@@ -394,6 +394,54 @@ export function createVaultHttpServer() {
         const providerQuery = url.searchParams.get("provider") || undefined;
         const models = await listModels(providerQuery);
         sendJson<ListModelsResponse>(res, 200, { success: true, models });
+        return;
+      }
+
+      // Add AI Model
+      if (method === "POST" && pathname === "/models") {
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+
+        const body = await readJsonBody<{ provider?: string; name?: string; displayName?: string; description?: string }>(req);
+        if (!body.provider || !body.name || !body.displayName) {
+          sendJson(res, 400, { error: "provider, name, and displayName are required." });
+          return;
+        }
+
+        try {
+          const newModel = await addModel({
+            provider: body.provider,
+            name: body.name,
+            displayName: body.displayName,
+            description: body.description,
+          });
+          sendJson(res, 201, { success: true, model: newModel });
+        } catch (error: any) {
+          console.error("Error adding model:", error);
+          sendJson(res, 500, { error: error.message || "Failed to add model." });
+        }
+        return;
+      }
+
+      // Delete AI Model
+      const deleteModelMatch = pathname.match(/^\/models\/([a-zA-Z0-9_-]+)$/);
+      if (method === "DELETE" && deleteModelMatch) {
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+
+        const modelId = deleteModelMatch[1];
+        try {
+          const { deleteModel } = await import("./vault/models.js");
+          await deleteModel(modelId);
+          sendJson(res, 200, { success: true });
+        } catch (error: any) {
+          console.error("Error deleting model:", error);
+          sendJson(res, 500, { error: error.message || "Failed to delete model." });
+        }
         return;
       }
 

@@ -3,8 +3,8 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { AiApiKeyMetadata } from "@ai-vault/types";
-import { addApiKeyAction, deleteApiKeyAction } from "../actions/keys.action";
-import { Button, Input, DropdownSelect, Card, ErrorAlert, Badge } from "@/shared/components";
+import { addApiKeyAction, deleteApiKeyAction, addModelAction, deleteModelAction } from "../actions/keys.action";
+import { Button, Input, DropdownSelect, Card, ErrorAlert, Badge, ConfirmDialog } from "@/shared/components";
 
 interface KeysManagerProps {
   initialKeys: AiApiKeyMetadata[];
@@ -16,16 +16,88 @@ const PROVIDER_OPTIONS = [
   { value: "anthropic", label: "Anthropic Claude" },
   { value: "deepseek", label: "DeepSeek" },
   { value: "groq", label: "Groq" },
+  { value: "local", label: "Local Models (Ollama, LM Studio)" },
   { value: "custom", label: "Custom / Other" },
 ];
+
+function AddCustomModel({ provider, onAdded }: { provider: string; onAdded: (model: any) => void }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [isPending, startTransition] = useTransition();
+
+  if (!isOpen) {
+    return (
+      <Button variant="ghost" size="sm" onClick={() => setIsOpen(true)} className="h-6 px-2 text-[10px] bg-white/[0.04]">
+        + add custom model
+      </Button>
+    );
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+
+    const formData = new FormData();
+    formData.append("provider", provider);
+    formData.append("name", name.trim());
+    formData.append("displayName", displayName.trim() || name.trim());
+
+    startTransition(async () => {
+      const res = await addModelAction(formData);
+      if (res.success && res.model) {
+        onAdded(res.model);
+        setIsOpen(false);
+        setName("");
+        setDisplayName("");
+      } else {
+        alert(res.error || "Failed to add model");
+      }
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-wrap items-center gap-2 mt-2 p-1.5 bg-white/[0.02] border border-white/[0.05] rounded-xl w-fit">
+      <div className="w-[150px]">
+        <Input
+          type="text"
+          placeholder="e.g. phi3:mini"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="h-8 text-[11px] px-2.5 bg-[#14151a]"
+          isMono
+          required
+        />
+      </div>
+      <div className="w-[150px]">
+        <Input
+          type="text"
+          placeholder="Display Name"
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+          className="h-8 text-[11px] px-2.5 bg-[#14151a]"
+        />
+      </div>
+      <Button type="submit" size="sm" isLoading={isPending} className="h-8 px-3 text-[11px] bg-white text-black hover:bg-neutral-200">
+        Save
+      </Button>
+      <Button type="button" variant="ghost" size="sm" onClick={() => setIsOpen(false)} className="h-8 px-2.5 text-[11px] text-neutral-400 hover:text-white">
+        Cancel
+      </Button>
+    </form>
+  );
+}
 
 export function KeysManager({ initialKeys }: KeysManagerProps) {
   const [keys, setKeys] = useState<AiApiKeyMetadata[]>(initialKeys);
   const [provider, setProvider] = useState("google");
   const [name, setName] = useState("Google Gemini");
   const [apiKey, setApiKey] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const [modelToDelete, setModelToDelete] = useState<{ id: string; name: string; provider: string } | null>(null);
 
   const handleProviderChange = (val: string) => {
     setProvider(val);
@@ -34,6 +106,7 @@ export function KeysManager({ initialKeys }: KeysManagerProps) {
     else if (val === "anthropic") setName("Anthropic Claude");
     else if (val === "deepseek") setName("DeepSeek");
     else if (val === "groq") setName("Groq");
+    else if (val === "local") setName("Local AI Model");
     else setName("Custom AI Key");
   };
 
@@ -45,7 +118,11 @@ export function KeysManager({ initialKeys }: KeysManagerProps) {
     const formData = new FormData();
     formData.append("provider", provider);
     formData.append("name", name);
-    formData.append("apiKey", apiKey);
+    const finalApiKey = provider === "local" && !apiKey.trim() ? "none" : apiKey;
+    formData.append("apiKey", finalApiKey);
+    if (baseUrl.trim()) {
+      formData.append("baseUrl", baseUrl.trim());
+    }
 
     startTransition(async () => {
       const res = await addApiKeyAction(formData);
@@ -129,14 +206,23 @@ export function KeysManager({ initialKeys }: KeysManagerProps) {
               />
             </div>
 
+            {(provider === "local" || provider === "custom") && (
+              <Input
+                label="API Base URL"
+                type="url"
+                value={baseUrl}
+                onChange={(e) => setBaseUrl(e.target.value)}
+                placeholder={provider === "local" ? "http://localhost:11434/v1/chat/completions" : "https://api.example.com/v1/chat/completions"}
+              />
+            )}
 
             <Input
               label="API Secret Key"
               type="password"
-              required
+              required={provider !== "local"}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder="sk-..."
+              placeholder={provider === "local" ? "(Optional for local models)" : "sk-..."}
               isMono
             />
 
@@ -146,7 +232,7 @@ export function KeysManager({ initialKeys }: KeysManagerProps) {
               <Button
                 type="submit"
                 isLoading={isPending}
-                disabled={!apiKey.trim()}
+                disabled={provider !== "local" && !apiKey.trim()}
               >
                 Add Key
               </Button>
@@ -189,16 +275,33 @@ export function KeysManager({ initialKeys }: KeysManagerProps) {
                     {k.models && k.models.length > 0 && (
                       <div className="pt-1 flex flex-wrap gap-1.5">
                         {k.models.map((model) => (
-                          <Badge
-                            key={model.id}
-                            variant="model"
-                            title={model.description || model.displayName}
-                          >
-                            {model.displayName || model.name}
-                          </Badge>
+                          <div key={model.id} className="group relative flex items-center bg-white/[0.03] border border-white/[0.05] rounded-md transition-colors hover:bg-white/[0.05]">
+                            <span className="px-2 py-0.5 text-neutral-300 text-[11px] font-mono cursor-default" title={model.description || model.displayName}>
+                              {model.displayName || model.name}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setModelToDelete({ id: model.id, name: model.name, provider: k.provider })}
+                              className="px-1.5 opacity-0 group-hover:opacity-100 transition-opacity text-neutral-500 hover:text-red-400"
+                              title="Delete model"
+                            >
+                              ×
+                            </button>
+                          </div>
                         ))}
                       </div>
                     )}
+                    <AddCustomModel
+                      provider={k.provider}
+                      onAdded={(model) => {
+                        setKeys(prev => prev.map(key => {
+                          if (key.provider === k.provider) {
+                            return { ...key, models: [...(key.models || []), model] };
+                          }
+                          return key;
+                        }));
+                      }}
+                    />
                   </div>
 
                   <div className="self-end sm:self-start pt-1">
@@ -217,6 +320,33 @@ export function KeysManager({ initialKeys }: KeysManagerProps) {
           )}
         </Card>
       </main>
+
+      <ConfirmDialog
+        isOpen={modelToDelete !== null}
+        title="Delete Custom Model"
+        description={`Are you sure you want to delete the model "${modelToDelete?.name}"? This cannot be undone.`}
+        confirmText="Delete Model"
+        isDestructive
+        onCancel={() => setModelToDelete(null)}
+        onConfirm={() => {
+          if (!modelToDelete) return;
+          const { id, provider } = modelToDelete;
+          setModelToDelete(null);
+          startTransition(async () => {
+            const res = await deleteModelAction(id);
+            if (res.success) {
+              setKeys(prev => prev.map(key => {
+                if (key.provider === provider) {
+                  return { ...key, models: key.models?.filter(m => m.id !== id) };
+                }
+                return key;
+              }));
+            } else {
+              alert(res.error || "Failed to delete model");
+            }
+          });
+        }}
+      />
     </div>
   );
 }

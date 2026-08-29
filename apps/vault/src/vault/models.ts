@@ -1,7 +1,8 @@
 import { 
   getAllModels, 
   getModelsByProvider, 
-  getModelById, 
+  getModelById,
+  createModelRecord,
   type ModelRecord 
 } from "../db/repository/models.repository.js";
 import { AiModelMetadata } from "@ai-vault/types";
@@ -38,4 +39,30 @@ export async function getModel(id: string): Promise<AiModelMetadata | null> {
   const record = await getModelById(id);
   if (!record) return null;
   return mapModelRecordToMetadata(record);
+}
+
+/**
+ * Adds a new model.
+ */
+export async function addModel(params: {
+  provider: string;
+  name: string;
+  displayName: string;
+  description?: string;
+}): Promise<AiModelMetadata> {
+  const record = await createModelRecord({
+    provider: params.provider,
+    name: params.name,
+    display_name: params.displayName,
+    description: params.description,
+  });
+  return mapModelRecordToMetadata(record);
+}
+
+/**
+ * Deletes a model by ID.
+ */
+export async function deleteModel(id: string): Promise<void> {
+  const { deleteModelRecord } = await import("../db/repository/models.repository.js");
+  await deleteModelRecord(id);
 }
