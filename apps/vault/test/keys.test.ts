@@ -116,7 +116,7 @@ describe("AI API Keys API (Unit Tests / In-Memory Mock DB)", () => {
 
     // 5. Decrypt key internally with session token
     const decryptedKey = await getDecryptedApiKey(keyId, sessionToken);
-    expect(decryptedKey).toBe(rawApiKey);
+    expect(decryptedKey.apiKey).toBe(rawApiKey);
 
     // 6. Verify that tampering with DB records (AAD mismatch or corrupted ciphertext/tag) fails decryption
     await prisma.ai_api_keys.create({
@@ -170,11 +170,11 @@ describe("AI API Keys API (Unit Tests / In-Memory Mock DB)", () => {
 
     // 4. Decrypt using sessionToken2 (both have independent copies of vaultKey encrypted with their token)
     const decryptedWithToken2 = await getDecryptedApiKey(key.id, sessionToken2);
-    expect(decryptedWithToken2).toBe("AIzaSyTest12345");
+    expect(decryptedWithToken2.apiKey).toBe("AIzaSyTest12345");
 
     // 5. Decrypt using sessionToken1
     const decryptedWithToken1 = await getDecryptedApiKey(key.id, sessionToken1);
-    expect(decryptedWithToken1).toBe("AIzaSyTest12345");
+    expect(decryptedWithToken1.apiKey).toBe("AIzaSyTest12345");
 
     // 6. Destroy session 1 (log out session 1)
     vaultState.destroySession(sessionToken1);
@@ -186,7 +186,7 @@ describe("AI API Keys API (Unit Tests / In-Memory Mock DB)", () => {
 
     // session 2 should still succeed
     const decryptedAfterSession1Destroyed = await getDecryptedApiKey(key.id, sessionToken2);
-    expect(decryptedAfterSession1Destroyed).toBe("AIzaSyTest12345");
+    expect(decryptedAfterSession1Destroyed.apiKey).toBe("AIzaSyTest12345");
 
     // 7. Destroy session 2
     vaultState.destroySession(sessionToken2);
