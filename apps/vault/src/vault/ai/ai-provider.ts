@@ -159,24 +159,33 @@ async function callGemini(
     };
   }
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": apiKey,
-    },
-    body: JSON.stringify(payload),
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(90000),
+    });
+  } catch (err: any) {
+    if (err.name === "TimeoutError" || err.message?.includes("timeout")) {
+      throw new Error("AI request timed out after 90 seconds. Please try again.");
+    }
+    throw err;
+  }
 
   if (!res.ok) {
     const errorText = await res.text();
     console.error(`[Gemini] API error (${res.status}):`, errorText);
-    throw new Error(`AI request failed (${res.status}). Please try again.`);
+    throw new Error(`AI request failed (${res.status}): ${errorText}`);
   }
 
   const data = (await res.json()) as {
     candidates?: {
-      content?: { parts?: { text?: string }[] };
+      content?: { parts?: { text?: string; thought?: boolean }[] };
     }[];
     usageMetadata?: {
       promptTokenCount?: number;
@@ -188,7 +197,13 @@ async function callGemini(
   };
 
   const candidate = data.candidates?.[0];
-  const partText = candidate?.content?.parts?.map((p) => p.text).join("");
+  const allParts = candidate?.content?.parts || [];
+  
+  // Distinguish thought parts from actual answer parts if present
+  const answerParts = allParts.filter((p) => !p.thought && p.text);
+  const partText = answerParts.length > 0
+    ? answerParts.map((p) => p.text).join("")
+    : allParts.map((p) => p.text || "").join("");
 
   if (!partText) {
     throw new Error("No text response received from Gemini API");
@@ -247,20 +262,29 @@ async function callAnthropic(
     payload.max_tokens = Math.max(maxTokens, budgetTokens + 1024);
   }
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify(payload),
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(90000),
+    });
+  } catch (err: any) {
+    if (err.name === "TimeoutError" || err.message?.includes("timeout")) {
+      throw new Error("AI request timed out after 90 seconds. Please try again.");
+    }
+    throw err;
+  }
 
   if (!res.ok) {
     const errorText = await res.text();
     console.error(`[Anthropic] API error (${res.status}):`, errorText);
-    throw new Error(`AI request failed (${res.status}). Please try again.`);
+    throw new Error(`AI request failed (${res.status}): ${errorText}`);
   }
 
   const data = (await res.json()) as {
@@ -308,14 +332,23 @@ async function callOpenAiCompatible(
     payload.reasoning_effort = thinkingLevel;
   }
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(payload),
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(90000),
+    });
+  } catch (err: any) {
+    if (err.name === "TimeoutError" || err.message?.includes("timeout")) {
+      throw new Error("AI request timed out after 90 seconds. Please try again.");
+    }
+    throw err;
+  }
 
   if (!res.ok) {
     const errorText = await res.text();
@@ -345,3 +378,4 @@ async function callOpenAiCompatible(
     thinkingLevel,
   };
 }
+
