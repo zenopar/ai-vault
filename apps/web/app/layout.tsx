@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   description: "A secure and intelligent platform for managing your AI interactions.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"
