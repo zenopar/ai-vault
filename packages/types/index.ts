@@ -147,6 +147,8 @@ export interface GetChatMessagesResponse {
   success: boolean;
   chat?: ChatMetadata;
   messages?: ChatMessageDto[];
+  hasMore?: boolean;
+  total?: number;
   error?: string;
 }
 
