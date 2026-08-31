@@ -313,9 +313,17 @@ export function createInMemoryPrismaMock() {
         }
         if (args?.orderBy?.created_at) {
           const dir = args.orderBy.created_at === "desc" ? -1 : 1;
-          return list.sort((a, b) => (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) * dir);
+          list.sort((a, b) => (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) * dir);
+        } else if (args?.orderBy?.sequence_number) {
+          const dir = args.orderBy.sequence_number === "desc" ? -1 : 1;
+          list.sort((a, b) => (a.sequence_number - b.sequence_number) * dir);
+        } else {
+          list.sort((a, b) => a.sequence_number - b.sequence_number);
         }
-        return list.sort((a, b) => a.sequence_number - b.sequence_number);
+
+        const skip = args?.skip ?? 0;
+        const take = args?.take !== undefined ? args.take : list.length;
+        return list.slice(skip, skip + take);
       }),
       findFirst: vi.fn(async (args?: any) => {
         let list = Array.from(messagesMap.values());
