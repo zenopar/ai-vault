@@ -25,6 +25,8 @@ interface ChatViewProps {
   initialModels: AiModelMetadata[];
   initialChatId?: string | null;
   initialMessages?: ChatMessageDto[];
+  initialHasMore?: boolean;
+  initialTotal?: number;
 }
 
 export function ChatView({
@@ -33,10 +35,13 @@ export function ChatView({
   initialModels,
   initialChatId = null,
   initialMessages = [],
+  initialHasMore = false,
 }: ChatViewProps) {
   const [chats, setChats] = useState<ChatMetadata[]>(initialChats);
   const [activeChatId, setActiveChatId] = useState<string | null>(initialChatId);
   const [messages, setMessages] = useState<ChatMessageDto[]>(initialMessages);
+  const [hasMore, setHasMore] = useState<boolean>(initialHasMore);
+  const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
   const [keys] = useState<AiApiKeyMetadata[]>(initialKeys);
   const [models] = useState<AiModelMetadata[]>(initialModels);
 
@@ -60,20 +65,75 @@ export function ChatView({
   const [isPending, setIsPending] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollToBottomRef = useRef<boolean>(true);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (shouldAutoScrollToBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages, isPending]);
+
+  const handleScroll = () => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+    shouldAutoScrollToBottomRef.current = isNearBottom;
+
+    if (container.scrollTop < 40 && hasMore && !isLoadingMore && activeChatId) {
+      handleLoadMore();
+    }
+  };
+
+  const handleLoadMore = async () => {
+    if (isLoadingMore || !hasMore || !activeChatId) return;
+
+    const container = scrollContainerRef.current;
+    const prevScrollHeight = container?.scrollHeight || 0;
+    const prevScrollTop = container?.scrollTop || 0;
+
+    shouldAutoScrollToBottomRef.current = false;
+    setIsLoadingMore(true);
+    setError(null);
+
+    try {
+      const res = await getChatMessagesAction(activeChatId, 30, messages.length, "desc");
+      if (res.success && res.data) {
+        const olderMessages = (res.data.messages || []).slice().reverse();
+        setMessages((prev) => [...olderMessages, ...prev]);
+        setHasMore(Boolean(res.data.hasMore));
+
+        // Preserve viewport position after prepending older messages
+        requestAnimationFrame(() => {
+          if (container) {
+            const newScrollHeight = container.scrollHeight;
+            container.scrollTop = prevScrollTop + (newScrollHeight - prevScrollHeight);
+          }
+        });
+      } else {
+        setError(res.error || "Failed to load earlier messages.");
+      }
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   const handleSelectChat = async (chatId: string) => {
     if (chatId === activeChatId) return;
     setError(null);
     setActiveChatId(chatId);
+    shouldAutoScrollToBottomRef.current = true;
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", `/app?c=${chatId}`);
+    }
     setIsPending(true);
     try {
-      const res = await getChatMessagesAction(chatId);
+      const res = await getChatMessagesAction(chatId, 30, 0, "desc");
       if (res.success && res.data) {
-        setMessages(res.data.messages || []);
+        const reversed = (res.data.messages || []).slice().reverse();
+        setMessages(reversed);
+        setHasMore(Boolean(res.data.hasMore));
         if (res.data.chat) {
           setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, ...res.data?.chat } : c)));
         }
@@ -89,7 +149,12 @@ export function ChatView({
   const handleNewChat = () => {
     setActiveChatId(null);
     setMessages([]);
+    setHasMore(false);
     setError(null);
+    shouldAutoScrollToBottomRef.current = true;
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", "/app");
+    }
     if (window.innerWidth < 768) setSidebarOpen(false);
   };
 
@@ -99,7 +164,9 @@ export function ChatView({
       const res = await deleteChatAction(chatId);
       if (res.success) {
         setChats((prev) => prev.filter((c) => c.id !== chatId));
-        if (activeChatId === chatId) handleNewChat();
+        if (activeChatId === chatId) {
+          handleNewChat();
+        }
       } else {
         setError(res.error || "Failed to delete chat.");
       }
@@ -112,6 +179,7 @@ export function ChatView({
     const trimmed = messageText.trim();
     if (!trimmed || isPending) return;
     setError(null);
+    shouldAutoScrollToBottomRef.current = true;
 
     const activeKey = keys.find((k) => k.id === selectedKeyId) || keys[0];
     const provider = activeKey?.provider || "google";
@@ -154,6 +222,9 @@ export function ChatView({
       });
 
       setActiveChatId(chat.id);
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", `/app?c=${chat.id}`);
+      }
       setMessages((prev) => [...prev.filter((m) => m.id !== tempUserMsg.id), userMessage, assistantMessage]);
     } finally {
       setIsPending(false);
@@ -203,10 +274,50 @@ export function ChatView({
         <main className="flex-1 flex flex-col h-full overflow-hidden transition-[padding] duration-200 md:pl-56">
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-4 sm:px-8 md:px-12 py-8">
+          <div
+            ref={scrollContainerRef}
+            onScroll={handleScroll}
+            className="flex-1 overflow-y-auto px-4 sm:px-8 md:px-12 py-8"
+          >
             <div className="max-w-4xl mx-auto mb-6">
               <ErrorAlert message={error} onDismiss={() => setError(null)} />
             </div>
+
+            {hasMore && (
+              <div className="flex justify-center mb-6">
+                <button
+                  type="button"
+                  onClick={handleLoadMore}
+                  disabled={isLoadingMore}
+                  className="group inline-flex items-center gap-2 px-4 py-1.5 text-xs font-medium text-neutral-400 hover:text-neutral-200 bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.08] hover:border-white/[0.15] rounded-full transition-all duration-200 backdrop-blur-md shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {isLoadingMore ? (
+                    <>
+                      <svg className="animate-spin h-3.5 w-3.5 text-neutral-400" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      <span>Načítání starších zpráv...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5 text-neutral-400 group-hover:-translate-y-0.5 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                      </svg>
+                      <span>Načíst předchozí zprávy</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {!hasMore && messages.length > 10 && (
+              <div className="flex items-center justify-center gap-2 my-6 text-[11px] font-mono tracking-wider text-neutral-500 uppercase">
+                <span className="w-8 h-px bg-white/[0.06]" />
+                <span>Začátek konverzace</span>
+                <span className="w-8 h-px bg-white/[0.06]" />
+              </div>
+            )}
 
             {messages.length > 0 && (
               <div className="max-w-4xl mx-auto">

@@ -31,6 +31,8 @@ export default async function AppPage({ searchParams }: AppPageProps) {
   let keys: AiApiKeyMetadata[] = [];
   let models: AiModelMetadata[] = [];
   let initialMessages: ChatMessageDto[] = [];
+  let initialHasMore = false;
+  let initialTotal = 0;
 
   try {
     const [chatsRes, keysRes, modelsRes] = await Promise.allSettled([
@@ -50,8 +52,11 @@ export default async function AppPage({ searchParams }: AppPageProps) {
     }
 
     if (targetChatId) {
-      const messagesRes = await getChatMessagesService(targetChatId);
-      initialMessages = messagesRes.messages || [];
+      const messagesRes = await getChatMessagesService(targetChatId, 30, 0, "desc");
+      // Since messages are retrieved newest-first (desc), reverse for top-to-bottom reading order
+      initialMessages = (messagesRes.messages || []).slice().reverse();
+      initialHasMore = messagesRes.hasMore;
+      initialTotal = messagesRes.total;
     }
   } catch (err) {
     console.error("[AppPage] Error fetching initial data:", err);
@@ -59,11 +64,14 @@ export default async function AppPage({ searchParams }: AppPageProps) {
 
   return (
     <ChatView
+      key={targetChatId || "new-chat"}
       initialChats={chats}
       initialKeys={keys}
       initialModels={models}
       initialChatId={targetChatId}
       initialMessages={initialMessages}
+      initialHasMore={initialHasMore}
+      initialTotal={initialTotal}
     />
   );
 }
