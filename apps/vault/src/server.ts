@@ -527,7 +527,7 @@ export function createVaultHttpServer() {
         const offsetParam = url.searchParams.get("offset");
         const sortParam = url.searchParams.get("sort");
 
-        const limit = limitParam ? Math.min(parseInt(limitParam, 10), 100) : 50;
+        const limit = limitParam ? Math.min(parseInt(limitParam, 10), 1000) : 500;
         const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
 
         if ((limit !== undefined && Number.isNaN(limit)) || (offset !== undefined && Number.isNaN(offset))) {
@@ -538,8 +538,8 @@ export function createVaultHttpServer() {
         const sort = sortParam === "desc" ? "desc" : "asc";
 
         const chat = await getChat(chatId, sessionToken);
-        const messages = await getChatMessages(chatId, sessionToken, limit, offset, sort);
-        sendJson<GetChatMessagesResponse>(res, 200, { success: true, chat, messages });
+        const { messages, hasMore, total } = await getChatMessages(chatId, sessionToken, limit, offset, sort);
+        sendJson<GetChatMessagesResponse>(res, 200, { success: true, chat, messages, hasMore, total });
         return;
       }
 

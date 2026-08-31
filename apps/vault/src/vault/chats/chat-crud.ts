@@ -8,7 +8,10 @@ import {
   getAllChatsRecords,
   deleteChatRecord,
 } from "../../db/repository/chats.repository.js";
-import { getMessagesByChatId } from "../../db/repository/messages.repository.js";
+import {
+  getMessagesByChatId,
+  countMessagesByChatId,
+} from "../../db/repository/messages.repository.js";
 import type { ChatMetadata, ChatMessageDto } from "@ai-vault/types";
 
 import {
@@ -21,6 +24,12 @@ export interface CreateChatParams {
   id?: string;
   title?: string;
   metadata?: Record<string, any> | null;
+}
+
+export interface GetChatMessagesResult {
+  messages: ChatMessageDto[];
+  hasMore: boolean;
+  total: number;
 }
 
 // === CORE CHAT CRUD ===
@@ -145,11 +154,17 @@ export async function getChatMessages(
   limit?: number,
   offset?: number,
   sort: "asc" | "desc" = "asc"
-): Promise<ChatMessageDto[]> {
-  const messageRecords = await getMessagesByChatId(chatId, limit, offset, sort);
+): Promise<GetChatMessagesResult> {
+  const [messageRecords, total] = await Promise.all([
+    getMessagesByChatId(chatId, limit, offset, sort),
+    countMessagesByChatId(chatId),
+  ]);
 
-  return await vaultState.withDbKey(sessionToken, (dbKey) => {
-    const messages: ChatMessageDto[] = [];
+  const currentOffset = offset ?? 0;
+  const hasMore = currentOffset + messageRecords.length < total;
+
+  const messages = await vaultState.withDbKey(sessionToken, (dbKey) => {
+    const list: ChatMessageDto[] = [];
 
     for (const msg of messageRecords) {
       let content = "[Failed to decrypt message content]";
@@ -221,7 +236,7 @@ export async function getChatMessages(
         }
       }
 
-      messages.push({
+      list.push({
         id: msg.id,
         chatId: msg.chat_id,
         role: msg.role as "user" | "assistant" | "system",
@@ -242,8 +257,14 @@ export async function getChatMessages(
       });
     }
 
-    return messages;
+    return list;
   });
+
+  return {
+    messages,
+    hasMore,
+    total,
+  };
 }
 
 export async function removeChat(id: string, sessionToken?: string): Promise<boolean> {
