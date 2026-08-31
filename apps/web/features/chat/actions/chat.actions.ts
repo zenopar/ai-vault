@@ -41,10 +41,10 @@ export async function listChatsAction(limit = 50, offset = 0): Promise<ActionRes
 
 export async function getChatMessagesAction(
   chatId: string,
-  limit?: number,
-  offset?: number,
-  sort?: string
-): Promise<ActionResult<{ chat?: ChatMetadata; messages: ChatMessageDto[] }>> {
+  limit = 30,
+  offset = 0,
+  sort = "desc"
+): Promise<ActionResult<{ chat?: ChatMetadata; messages: ChatMessageDto[]; hasMore: boolean; total: number }>> {
   try {
     const result = await getChatMessagesService(chatId, limit, offset, sort);
     return { success: true, data: result };

@@ -37,12 +37,14 @@ export async function listChatsService(limit = 50, offset = 0): Promise<ChatMeta
 
 export async function getChatMessagesService(
   chatId: string,
-  limit?: number,
-  offset?: number,
-  sort?: string
+  limit = 30,
+  offset = 0,
+  sort = "desc"
 ): Promise<{
   chat?: ChatMetadata;
   messages: ChatMessageDto[];
+  hasMore: boolean;
+  total: number;
 }> {
   const sessionToken = await getSessionToken();
   if (!sessionToken) {
@@ -73,6 +75,8 @@ export async function getChatMessagesService(
   return {
     chat: response.data.chat,
     messages: response.data.messages || [],
+    hasMore: Boolean(response.data.hasMore),
+    total: response.data.total ?? (response.data.messages?.length || 0),
   };
 }
 
