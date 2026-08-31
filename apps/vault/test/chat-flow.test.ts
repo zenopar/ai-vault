@@ -257,4 +257,102 @@ describe("End-to-End Chat & Messaging API (Unit Tests / Mock AI)", () => {
     expect(resNone.body.assistantMessage.thinkingLevel).toBe("none");
     expect(capturedRequestBody.generation_config.thinking_config).toBeUndefined();
   });
+
+  it("should not persist orphaned user messages if AI completion fails", async () => {
+    const initResult = await initVault("SecureMasterPassword123!");
+    const sessionToken = initResult.sessionToken!;
+
+    await addApiKey(
+      {
+        provider: "openai",
+        name: "Main OpenAI Key",
+        apiKey: "sk-proj-test-key-12345",
+      },
+      sessionToken
+    );
+
+    // Mock fetch to simulate an AI provider network failure
+    global.fetch = vi.fn().mockImplementation(async () => {
+      return new Response("Service Unavailable", { status: 503 });
+    });
+
+    const prompt = "This message should not be persisted if AI fails.";
+    const res = await request(server)
+      .post("/chats/messages")
+      .set("x-vault-secret", "test-secret")
+      .set("x-session-token", sessionToken)
+      .send({
+        message: prompt,
+        provider: "openai",
+        model: "gpt-5.6-sol",
+      });
+
+    expect(res.status).toBe(500);
+    expect(res.body.error).toContain("AI request failed (503)");
+
+    // Verify in DB that no messages and no empty chats were persisted
+    const dbMessages = await prisma.messages.findMany();
+    expect(dbMessages).toHaveLength(0);
+
+    const dbChats = await prisma.chats.findMany();
+    expect(dbChats).toHaveLength(0);
+  });
+
+  it("should atomically persist user and assistant messages and return them with pagination", async () => {
+    const initResult = await initVault("SecureMasterPassword123!");
+    const sessionToken = initResult.sessionToken!;
+
+    await addApiKey(
+      {
+        provider: "openai",
+        name: "Main OpenAI Key",
+        apiKey: "sk-proj-test-key-12345",
+      },
+      sessionToken
+    );
+
+    global.fetch = vi.fn().mockImplementation(async () => {
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content: "AI response from frontier model." } }],
+          usage: { prompt_tokens: 15, completion_tokens: 25, total_tokens: 40 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    });
+
+    const res = await request(server)
+      .post("/chats/messages")
+      .set("x-vault-secret", "test-secret")
+      .set("x-session-token", sessionToken)
+      .send({
+        message: "Hello world!",
+        provider: "openai",
+        model: "gpt-5.6-sol",
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.userMessage.content).toBe("Hello world!");
+    expect(res.body.assistantMessage.content).toBe("AI response from frontier model.");
+
+    const chatId = res.body.chat.id;
+
+    // Verify DB has both messages
+    const dbMessages = await prisma.messages.findMany({ where: { chat_id: chatId } });
+    expect(dbMessages).toHaveLength(2);
+
+    // Verify GET /chats/:id/messages with pagination metadata
+    const getRes = await request(server)
+      .get(`/chats/${chatId}/messages?limit=10&sort=desc`)
+      .set("x-vault-secret", "test-secret")
+      .set("x-session-token", sessionToken);
+
+    expect(getRes.status).toBe(200);
+    expect(getRes.body.messages).toHaveLength(2);
+    expect(getRes.body.total).toBe(2);
+    expect(getRes.body.hasMore).toBe(false);
+    expect(getRes.body.messages[0].role).toBe("assistant");
+    expect(getRes.body.messages[1].role).toBe("role" in getRes.body.messages[1] ? getRes.body.messages[1].role : "user");
+  });
 });
+

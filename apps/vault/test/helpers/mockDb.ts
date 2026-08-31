@@ -283,6 +283,16 @@ export function createInMemoryPrismaMock() {
       }),
     },
     messages: {
+      count: vi.fn(async (args?: any) => {
+        let list = Array.from(messagesMap.values());
+        if (args?.where?.chat_id) {
+          list = list.filter((m) => m.chat_id === args.where.chat_id);
+        }
+        if (args?.where?.status) {
+          list = list.filter((m) => m.status === args.where.status);
+        }
+        return list.length;
+      }),
       findMany: vi.fn(async (args?: any) => {
         let list = Array.from(messagesMap.values());
         if (args?.where?.chat_id) {
