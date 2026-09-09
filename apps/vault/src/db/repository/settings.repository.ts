@@ -1,7 +1,4 @@
 import { getPrismaClient } from "../client.js";
-import { randomUUID } from "node:crypto";
-
-import { getPrismaClient } from "../client.js";
 import { Prisma, settings } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 
