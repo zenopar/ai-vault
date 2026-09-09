@@ -188,16 +188,7 @@ export async function getChatMessages(
         console.warn(`[getChatMessages] Decryption failed for message (${msg.id}):`, e);
       }
 
-      let modelId: string | undefined = undefined;
-      let modelName: string | undefined = undefined;
-      let thinkingLevel: string | undefined = undefined;
-      let inputTokens: number | undefined = undefined;
-      let outputTokens: number | undefined = undefined;
-      let thoughtTokens: number | undefined = undefined;
-      let inputCost: number | undefined = undefined;
-      let outputCost: number | undefined = undefined;
-      let thoughtCost: number | undefined = undefined;
-      let totalCost: number | undefined = undefined;
+      let metadata: Partial<ChatMessageDto> = {};
 
       if (msg.encrypted_metadata && msg.metadata_iv && msg.metadata_tag) {
         try {
@@ -213,24 +204,25 @@ export async function getChatMessages(
           } finally {
             decMetadata.fill(0);
           }
-          const metadataObj = JSON.parse(metadataStr);
+          const { model_id, model_name, thinking_level, stats } = JSON.parse(metadataStr);
+          const inputCost = stats?.input_cost;
+          const outputCost = stats?.output_cost;
+          const totalCost = (inputCost !== undefined || outputCost !== undefined)
+            ? (inputCost || 0) + (outputCost || 0)
+            : undefined;
 
-          modelId = metadataObj.model_id ?? undefined;
-          modelName = metadataObj.model_name ?? undefined;
-          thinkingLevel = metadataObj.thinking_level ?? undefined;
-          
-          if (metadataObj.stats) {
-            inputTokens = metadataObj.stats.input_tokens || undefined;
-            outputTokens = metadataObj.stats.output_tokens || undefined;
-            thoughtTokens = metadataObj.stats.thought_tokens || undefined;
-            inputCost = metadataObj.stats.input_cost || undefined;
-            outputCost = metadataObj.stats.output_cost || undefined;
-            thoughtCost = metadataObj.stats.thought_cost || undefined;
-          }
-
-          if (inputCost !== undefined || outputCost !== undefined) {
-            totalCost = (inputCost || 0) + (outputCost || 0);
-          }
+          metadata = {
+            modelId: model_id,
+            modelName: model_name,
+            thinkingLevel: thinking_level,
+            inputTokens: stats?.input_tokens,
+            outputTokens: stats?.output_tokens,
+            thoughtTokens: stats?.thought_tokens,
+            inputCost,
+            outputCost,
+            thoughtCost: stats?.thought_cost,
+            totalCost,
+          };
         } catch (e) {
           console.warn(`[getChatMessages] Decryption failed for message metadata (${msg.id}):`, e);
         }
@@ -242,16 +234,7 @@ export async function getChatMessages(
         role: msg.role as "user" | "assistant" | "system",
         content,
         sequenceNumber: msg.sequence_number,
-        modelId,
-        modelName,
-        thinkingLevel,
-        inputTokens,
-        outputTokens,
-        thoughtTokens,
-        inputCost,
-        outputCost,
-        thoughtCost,
-        totalCost,
+        ...metadata,
         createdAt: msg.created_at.toISOString(),
         updatedAt: msg.updated_at.toISOString(),
       });
