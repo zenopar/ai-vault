@@ -1,11 +1,12 @@
 import { getPrismaClient } from "../client.js";
+import { Prisma, vault_config } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 
 /**
  * Retrieves the single vault configuration from the database.
  * Returns null if the vault has not been initialized yet.
  */
-export async function getVaultConfig() {
+export async function getVaultConfig(): Promise<vault_config | null> {
   const prisma = getPrismaClient();
   return prisma.vault_config.findFirst();
 }
@@ -14,20 +15,7 @@ export async function getVaultConfig() {
  * Creates the initial vault configuration.
  * Throws an error if a configuration already exists.
  */
-export async function createVaultConfig(data: {
-  kdf_algorithm: string;
-  kdf_memory_cost: number;
-  kdf_time_cost: number;
-  kdf_parallelism: number;
-  kdf_salt: string;
-  wrapped_vault_key: string;
-  wrapped_vault_key_iv: string;
-  wrapped_vault_key_tag: string;
-  recovery_kdf_salt: string;
-  wrapped_vault_key_recovery: string;
-  wrapped_vault_key_recovery_iv: string;
-  wrapped_vault_key_recovery_tag: string;
-}) {
+export async function createVaultConfig(data: Prisma.vault_configCreateInput): Promise<vault_config> {
   const prisma = getPrismaClient();
 
   // Ensure no existing config
@@ -38,8 +26,8 @@ export async function createVaultConfig(data: {
 
   return prisma.vault_config.create({
     data: {
-      id: randomUUID(),
-      ...data
+      ...data,
+      id: data.id || randomUUID(),
     },
   });
 }
