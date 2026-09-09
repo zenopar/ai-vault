@@ -1,17 +1,24 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { z } from "zod";
 import { verifySolution } from "altcha-lib/v1";
 import { checkRateLimit, checkBruteForceLock, recordFailedAttempt, clearFailedAttempts } from "@/shared/lib/rate-limit";
 import { getClientIp } from "@/shared/lib/get-ip";
 import { unlockVaultService } from "../services/unlock-vault.service";
 import { createSession } from "@/shared/lib/session";
 import { getAltchaSecret } from "@/shared/lib/altcha-secret";
+import { parseFormData } from "@/shared/lib/safe-action";
 
 export type UnlockVaultActionResult = {
   success: boolean;
   error?: string;
 };
+
+export const unlockVaultSchema = z.object({
+  altcha: z.string().min(1, "Proof of work (Altcha) is required. Please solve the captcha."),
+  password: z.string().min(1, "Password or recovery code is required."),
+});
 
 export async function unlockVaultAction(formData: FormData): Promise<UnlockVaultActionResult> {
   const ip = await getClientIp();
@@ -28,15 +35,24 @@ export async function unlockVaultAction(formData: FormData): Promise<UnlockVault
     return { success: false, error: "Too many login attempts. Please try again later." };
   }
 
-  // 3. Verify Altcha (Proof of Work)
-  const altchaPayload = formData.get("altcha")?.toString();
-  if (!altchaPayload) {
-    recordFailedAttempt(ip);
-    return { success: false, error: "Proof of work (Altcha) is required. Please solve the captcha." };
+  // 3. Validate form data with Zod
+  let altcha: string;
+  let password: string;
+  try {
+    const parsed = parseFormData(unlockVaultSchema, formData);
+    altcha = parsed.altcha;
+    password = parsed.password;
+  } catch (err: unknown) {
+    if (err instanceof z.ZodError) {
+      recordFailedAttempt(ip);
+      return { success: false, error: err.issues[0]?.message || "Validation failed." };
+    }
+    return { success: false, error: "Invalid form submission." };
   }
 
+  // 4. Verify Altcha (Proof of Work)
   try {
-    const isValidAltcha = await verifySolution(altchaPayload, getAltchaSecret());
+    const isValidAltcha = await verifySolution(altcha, getAltchaSecret());
     if (!isValidAltcha) {
       recordFailedAttempt(ip);
       return { success: false, error: "Invalid proof of work." };
@@ -46,13 +62,7 @@ export async function unlockVaultAction(formData: FormData): Promise<UnlockVault
     return { success: false, error: "Proof of work verification failed." };
   }
 
-  // 4. Verify Password
-  const password = formData.get("password")?.toString() || "";
-
-  if (!password) {
-    return { success: false, error: "Password or recovery code is required." };
-  }
-
+  // 5. Verify Password & Unlock
   let success = false;
   let sessionToken: string | undefined = undefined;
   try {
@@ -61,27 +71,20 @@ export async function unlockVaultAction(formData: FormData): Promise<UnlockVault
     sessionToken = result.sessionToken;
   } catch (error: unknown) {
     console.error("[unlockVaultAction] Error:", error);
-    
-    // Record failed attempt for progressive delay
     recordFailedAttempt(ip);
     
     if (error instanceof Error && error.message.includes("Invalid password")) {
-        return { success: false, error: "Invalid password or recovery code." };
+      return { success: false, error: "Invalid password or recovery code." };
     }
-    
     return { success: false, error: "An unexpected error occurred." };
   }
 
   if (success && sessionToken) {
-    // Clear failed attempts on successful login
     clearFailedAttempts(ip);
-    
     await createSession(sessionToken);
-    // redirect throws a NEXT_REDIRECT error under the hood, so it must be outside the try/catch
     redirect("/app");
   }
   
-  // If we reach here without throwing, it's still a failure
   recordFailedAttempt(ip);
   return { success: false, error: "Invalid password or recovery code." };
 }

@@ -1,12 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { withSafeAction, parseFormData } from "@/shared/lib/safe-action";
 import { addApiKeyService, deleteApiKeyService, addModelService, deleteModelService } from "../services/keys.service";
 import { AiApiKeyMetadata, AiModelMetadata } from "@ai-vault/types";
 
 export type AddApiKeyActionResult = {
   success: boolean;
   key?: AiApiKeyMetadata;
+  data?: AiApiKeyMetadata;
   error?: string;
 };
 
@@ -15,100 +18,89 @@ export type DeleteApiKeyActionResult = {
   error?: string;
 };
 
-export async function addApiKeyAction(formData: FormData): Promise<AddApiKeyActionResult> {
-  const provider = formData.get("provider")?.toString()?.trim() || "";
-  const name = formData.get("name")?.toString()?.trim() || "";
-  const apiKey = formData.get("apiKey")?.toString()?.trim() || "";
-  const baseUrl = formData.get("baseUrl")?.toString()?.trim() || undefined;
-
-  if (!provider) {
-    return { success: false, error: "Please select an AI provider." };
-  }
-  if (!name) {
-    return { success: false, error: "Please provide a name for this key." };
-  }
-  if (!apiKey) {
-    return { success: false, error: "API Key cannot be empty." };
-  }
-
-  try {
-    const key = await addApiKeyService({ provider, name, apiKey, baseUrl });
-    revalidatePath("/keys");
-    return { success: true, key };
-  } catch (err: unknown) {
-    console.error("[addApiKeyAction] Error:", err);
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : "Failed to add API key.",
-    };
-  }
-}
-
-export async function deleteApiKeyAction(keyId: string): Promise<DeleteApiKeyActionResult> {
-  if (!keyId || typeof keyId !== "string") {
-    return { success: false, error: "Invalid Key ID." };
-  }
-
-  try {
-    await deleteApiKeyService(keyId);
-    revalidatePath("/keys");
-    return { success: true };
-  } catch (err: unknown) {
-    console.error("[deleteApiKeyAction] Error:", err);
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : "Failed to delete API key.",
-    };
-  }
-}
-
 export type AddModelActionResult = {
   success: boolean;
   model?: AiModelMetadata;
+  data?: AiModelMetadata;
   error?: string;
 };
-
-export async function addModelAction(formData: FormData): Promise<AddModelActionResult> {
-  const provider = formData.get("provider")?.toString()?.trim() || "";
-  const name = formData.get("name")?.toString()?.trim() || "";
-  const displayName = formData.get("displayName")?.toString()?.trim() || name;
-
-  if (!provider || !name) {
-    return { success: false, error: "Provider and Model Name are required." };
-  }
-
-  try {
-    const model = await addModelService({ provider, name, displayName });
-    revalidatePath("/keys");
-    return { success: true, model };
-  } catch (err: unknown) {
-    console.error("[addModelAction] Error:", err);
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : "Failed to add model.",
-    };
-  }
-}
 
 export type DeleteModelActionResult = {
   success: boolean;
   error?: string;
 };
 
-export async function deleteModelAction(modelId: string): Promise<DeleteModelActionResult> {
-  if (!modelId || typeof modelId !== "string") {
-    return { success: false, error: "Invalid Model ID." };
-  }
+export const addApiKeySchema = z.object({
+  provider: z.string().trim().min(1, "Please select an AI provider."),
+  name: z.string().trim().min(1, "Please provide a name for this key."),
+  apiKey: z.string().trim().min(1, "API Key cannot be empty."),
+  baseUrl: z.string().trim().optional().transform((val) => val || undefined),
+});
 
-  try {
-    await deleteModelService(modelId);
+export async function addApiKeyAction(formData: FormData): Promise<AddApiKeyActionResult> {
+  const wrapped = withSafeAction("addApiKeyAction", async () => {
+    const parsed = parseFormData(addApiKeySchema, formData);
+    const key = await addApiKeyService(parsed);
     revalidatePath("/keys");
-    return { success: true };
-  } catch (err: unknown) {
-    console.error("[deleteModelAction] Error:", err);
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : "Failed to delete model.",
-    };
-  }
+    return key;
+  });
+  const res = await wrapped();
+  return {
+    success: res.success,
+    key: res.data,
+    data: res.data,
+    error: res.error,
+  };
+}
+
+export async function deleteApiKeyAction(keyId: string): Promise<DeleteApiKeyActionResult> {
+  const wrapped = withSafeAction("deleteApiKeyAction", async () => {
+    const validId = z.string().min(1, "Invalid Key ID.").parse(keyId);
+    await deleteApiKeyService(validId);
+    revalidatePath("/keys");
+  });
+  const res = await wrapped();
+  return {
+    success: res.success,
+    error: res.error,
+  };
+}
+
+export const addModelSchema = z.object({
+  provider: z.string().trim().min(1, "Provider and Model Name are required."),
+  name: z.string().trim().min(1, "Provider and Model Name are required."),
+  displayName: z.string().trim().optional(),
+}).transform((val) => ({
+  provider: val.provider,
+  name: val.name,
+  displayName: val.displayName || val.name,
+}));
+
+export async function addModelAction(formData: FormData): Promise<AddModelActionResult> {
+  const wrapped = withSafeAction("addModelAction", async () => {
+    const parsed = parseFormData(addModelSchema, formData);
+    const model = await addModelService(parsed);
+    revalidatePath("/keys");
+    return model;
+  });
+  const res = await wrapped();
+  return {
+    success: res.success,
+    model: res.data,
+    data: res.data,
+    error: res.error,
+  };
+}
+
+export async function deleteModelAction(modelId: string): Promise<DeleteModelActionResult> {
+  const wrapped = withSafeAction("deleteModelAction", async () => {
+    const validId = z.string().min(1, "Invalid Model ID.").parse(modelId);
+    await deleteModelService(validId);
+    revalidatePath("/keys");
+  });
+  const res = await wrapped();
+  return {
+    success: res.success,
+    error: res.error,
+  };
 }
