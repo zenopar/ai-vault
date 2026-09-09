@@ -1,106 +1,40 @@
 import { getPrismaClient } from "../client.js";
 import { randomUUID } from "node:crypto";
 
-export interface SettingsRecord {
-  id: string;
-  encryption_version: number;
-  encrypted_system_prompt: string | null;
-  system_prompt_iv: string | null;
-  system_prompt_tag: string | null;
-  encrypted_token_tiers: string | null;
-  token_tiers_iv: string | null;
-  token_tiers_tag: string | null;
-  encrypted_max_cost_per_request: string | null;
-  max_cost_per_request_iv: string | null;
-  max_cost_per_request_tag: string | null;
-  encrypted_title_prompt: string | null;
-  title_prompt_iv: string | null;
-  title_prompt_tag: string | null;
-  title_api_key_id: string | null;
-  title_model_id: string | null;
-  created_at: Date;
-  updated_at: Date;
-}
+import { getPrismaClient } from "../client.js";
+import { Prisma, settings } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 
-export interface UpdateSettingsData {
-  encrypted_system_prompt?: string | null;
-  system_prompt_iv?: string | null;
-  system_prompt_tag?: string | null;
-  
-  encrypted_token_tiers?: string | null;
-  token_tiers_iv?: string | null;
-  token_tiers_tag?: string | null;
-  
-  encrypted_max_cost_per_request?: string | null;
-  max_cost_per_request_iv?: string | null;
-  max_cost_per_request_tag?: string | null;
-  
-  encrypted_title_prompt?: string | null;
-  title_prompt_iv?: string | null;
-  title_prompt_tag?: string | null;
-  
-  title_api_key_id?: string | null;
-  title_model_id?: string | null;
-}
-
-export async function getSettingsRecord(): Promise<SettingsRecord | null> {
+export async function getSettingsRecord(): Promise<settings | null> {
   const prisma = getPrismaClient();
-  const settings = await prisma.settings.findFirst();
-  return settings as SettingsRecord | null;
+  const settingsRecord = await prisma.settings.findFirst();
+  return settingsRecord;
 }
 
-export async function upsertSettingsRecord(data: UpdateSettingsData): Promise<SettingsRecord> {
+export async function upsertSettingsRecord(data: Prisma.settingsUpdateInput | Prisma.settingsCreateInput): Promise<settings> {
   const prisma = getPrismaClient();
   const existing = await prisma.settings.findFirst();
+
+  const cleanData = Object.fromEntries(
+    Object.entries(data).filter(([_, v]) => v !== undefined)
+  );
 
   if (existing) {
     return prisma.settings.update({
       where: { id: existing.id },
       data: {
-        ...(data.encrypted_system_prompt !== undefined && { encrypted_system_prompt: data.encrypted_system_prompt }),
-        ...(data.system_prompt_iv !== undefined && { system_prompt_iv: data.system_prompt_iv }),
-        ...(data.system_prompt_tag !== undefined && { system_prompt_tag: data.system_prompt_tag }),
-
-        ...(data.encrypted_token_tiers !== undefined && { encrypted_token_tiers: data.encrypted_token_tiers }),
-        ...(data.token_tiers_iv !== undefined && { token_tiers_iv: data.token_tiers_iv }),
-        ...(data.token_tiers_tag !== undefined && { token_tiers_tag: data.token_tiers_tag }),
-
-        ...(data.encrypted_max_cost_per_request !== undefined && { encrypted_max_cost_per_request: data.encrypted_max_cost_per_request }),
-        ...(data.max_cost_per_request_iv !== undefined && { max_cost_per_request_iv: data.max_cost_per_request_iv }),
-        ...(data.max_cost_per_request_tag !== undefined && { max_cost_per_request_tag: data.max_cost_per_request_tag }),
-
-        ...(data.encrypted_title_prompt !== undefined && { encrypted_title_prompt: data.encrypted_title_prompt }),
-        ...(data.title_prompt_iv !== undefined && { title_prompt_iv: data.title_prompt_iv }),
-        ...(data.title_prompt_tag !== undefined && { title_prompt_tag: data.title_prompt_tag }),
-
-        ...(data.title_api_key_id !== undefined && { title_api_key_id: data.title_api_key_id }),
-        ...(data.title_model_id !== undefined && { title_model_id: data.title_model_id }),
+        ...cleanData,
+        updated_at: new Date(),
       },
-    }) as unknown as Promise<SettingsRecord>;
+    });
   } else {
     return prisma.settings.create({
       data: {
+        ...(cleanData as Prisma.settingsCreateInput),
         id: randomUUID(),
         encryption_version: 1,
-        encrypted_system_prompt: data.encrypted_system_prompt ?? null,
-        system_prompt_iv: data.system_prompt_iv ?? null,
-        system_prompt_tag: data.system_prompt_tag ?? null,
-
-        encrypted_token_tiers: data.encrypted_token_tiers ?? null,
-        token_tiers_iv: data.token_tiers_iv ?? null,
-        token_tiers_tag: data.token_tiers_tag ?? null,
-
-        encrypted_max_cost_per_request: data.encrypted_max_cost_per_request ?? null,
-        max_cost_per_request_iv: data.max_cost_per_request_iv ?? null,
-        max_cost_per_request_tag: data.max_cost_per_request_tag ?? null,
-
-        encrypted_title_prompt: data.encrypted_title_prompt ?? null,
-        title_prompt_iv: data.title_prompt_iv ?? null,
-        title_prompt_tag: data.title_prompt_tag ?? null,
-
-        title_api_key_id: data.title_api_key_id ?? null,
-        title_model_id: data.title_model_id ?? null,
       },
-    }) as unknown as Promise<SettingsRecord>;
+    });
   }
 }
+
