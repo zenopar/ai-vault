@@ -30,6 +30,20 @@ export async function getSessionToken(): Promise<string | undefined> {
 }
 
 /**
+ * Executes an operation with the current session token.
+ * Throws an error if no active session exists.
+ */
+export async function fetchWithSession<T>(
+  fetcher: (sessionToken: string) => Promise<T>
+): Promise<T> {
+  const sessionToken = await getSessionToken();
+  if (!sessionToken) {
+    throw new Error("No active session. Please unlock the vault.");
+  }
+  return fetcher(sessionToken);
+}
+
+/**
  * Verifies if the request has a valid session cookie by asking the Vault backend.
  */
 export async function verifySession(): Promise<boolean> {

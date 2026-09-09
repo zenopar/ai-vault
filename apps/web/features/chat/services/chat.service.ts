@@ -1,6 +1,6 @@
 import "server-only";
 import { VaultApiClient } from "@/shared/lib/vault-client";
-import { getSessionToken } from "@/shared/lib/session";
+import { fetchWithSession } from "@/shared/lib/session";
 import {
   ListChatsResponse,
   GetChatMessagesResponse,
@@ -8,14 +8,6 @@ import {
   ChatMetadata,
   ChatMessageDto,
 } from "@ai-vault/types";
-
-async function fetchWithSession<T>(fetcher: (token: string) => Promise<T>): Promise<T> {
-  const sessionToken = await getSessionToken();
-  if (!sessionToken) {
-    throw new Error("No active session. Please unlock the vault.");
-  }
-  return fetcher(sessionToken);
-}
 
 export async function listChatsService(limit = 50, offset = 0): Promise<ChatMetadata[]> {
   const params = new URLSearchParams();
