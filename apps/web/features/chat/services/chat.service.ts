@@ -9,20 +9,23 @@ import {
   ChatMessageDto,
 } from "@ai-vault/types";
 
-export async function listChatsService(limit = 50, offset = 0): Promise<ChatMetadata[]> {
+async function fetchWithSession<T>(fetcher: (token: string) => Promise<T>): Promise<T> {
   const sessionToken = await getSessionToken();
   if (!sessionToken) {
     throw new Error("No active session. Please unlock the vault.");
   }
+  return fetcher(sessionToken);
+}
 
+export async function listChatsService(limit = 50, offset = 0): Promise<ChatMetadata[]> {
   const params = new URLSearchParams();
   if (limit !== undefined) params.append("limit", limit.toString());
   if (offset !== undefined) params.append("offset", offset.toString());
   const query = params.toString() ? `?${params.toString()}` : "";
 
-  const response = await VaultApiClient.sendGetRequest<ListChatsResponse>(`/chats${query}`, {
-    sessionToken,
-  });
+  const response = await fetchWithSession((sessionToken) =>
+    VaultApiClient.sendGetRequest<ListChatsResponse>(`/chats${query}`, { sessionToken })
+  );
 
   if (response.error) {
     throw new Error(response.errorDetails || response.error);
@@ -46,22 +49,17 @@ export async function getChatMessagesService(
   hasMore: boolean;
   total: number;
 }> {
-  const sessionToken = await getSessionToken();
-  if (!sessionToken) {
-    throw new Error("No active session. Please unlock the vault.");
-  }
-
   const params = new URLSearchParams();
   if (limit !== undefined) params.append("limit", limit.toString());
   if (offset !== undefined) params.append("offset", offset.toString());
   if (sort) params.append("sort", sort);
   const query = params.toString() ? `?${params.toString()}` : "";
 
-  const response = await VaultApiClient.sendGetRequest<GetChatMessagesResponse>(
-    `/chats/${encodeURIComponent(chatId)}/messages${query}`,
-    {
-      sessionToken,
-    }
+  const response = await fetchWithSession((sessionToken) =>
+    VaultApiClient.sendGetRequest<GetChatMessagesResponse>(
+      `/chats/${encodeURIComponent(chatId)}/messages${query}`,
+      { sessionToken }
+    )
   );
 
   if (response.error) {
@@ -87,23 +85,18 @@ export async function sendMessageService(params: {
   model?: string;
   thinkingLevel?: "low" | "medium" | "high" | "none" | string;
 }): Promise<SendChatMessageResponse> {
-  const sessionToken = await getSessionToken();
-  if (!sessionToken) {
-    throw new Error("No active session. Please unlock the vault.");
-  }
-
-  const response = await VaultApiClient.sendPostRequest<SendChatMessageResponse>(
-    "/chats/messages",
-    {
-      chatId: params.chatId,
-      message: params.message,
-      provider: params.provider,
-      model: params.model,
-      thinkingLevel: params.thinkingLevel,
-    },
-    {
-      sessionToken,
-    }
+  const response = await fetchWithSession((sessionToken) =>
+    VaultApiClient.sendPostRequest<SendChatMessageResponse>(
+      "/chats/messages",
+      {
+        chatId: params.chatId,
+        message: params.message,
+        provider: params.provider,
+        model: params.model,
+        thinkingLevel: params.thinkingLevel,
+      },
+      { sessionToken }
+    )
   );
 
   if (response.error) {
@@ -118,16 +111,11 @@ export async function sendMessageService(params: {
 }
 
 export async function deleteChatService(chatId: string): Promise<boolean> {
-  const sessionToken = await getSessionToken();
-  if (!sessionToken) {
-    throw new Error("No active session. Please unlock the vault.");
-  }
-
-  const response = await VaultApiClient.sendDeleteRequest<{ success: boolean }>(
-    `/chats/${encodeURIComponent(chatId)}`,
-    {
-      sessionToken,
-    }
+  const response = await fetchWithSession((sessionToken) =>
+    VaultApiClient.sendDeleteRequest<{ success: boolean }>(
+      `/chats/${encodeURIComponent(chatId)}`,
+      { sessionToken }
+    )
   );
 
   if (response.error) {
@@ -136,3 +124,4 @@ export async function deleteChatService(chatId: string): Promise<boolean> {
 
   return Boolean(response.data?.success);
 }
+
