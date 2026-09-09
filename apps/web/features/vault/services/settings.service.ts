@@ -1,9 +1,12 @@
 import "server-only";
 import { VaultApiClient } from "@/shared/lib/vault-client";
+import { fetchWithSession } from "@/shared/lib/session";
 import { GetSettingsResponse, UpdateSettingsRequest, UpdateSettingsResponse } from "@ai-vault/types";
 
-export async function getSettingsService(sessionToken: string): Promise<GetSettingsResponse> {
-    const response = await VaultApiClient.sendGetRequest<GetSettingsResponse>("/settings", { sessionToken });
+export async function getSettingsService(): Promise<GetSettingsResponse> {
+    const response = await fetchWithSession((sessionToken) =>
+        VaultApiClient.sendGetRequest<GetSettingsResponse>("/settings", { sessionToken })
+    );
 
     if (response.error || !response.data) {
         throw new Error(response.errorDetails || response.error || "Failed to connect to Vault backend.");
@@ -16,8 +19,10 @@ export async function getSettingsService(sessionToken: string): Promise<GetSetti
     return response.data;
 }
 
-export async function updateSettingsService(sessionToken: string, request: UpdateSettingsRequest): Promise<UpdateSettingsResponse> {
-    const response = await VaultApiClient.sendPutRequest<UpdateSettingsResponse, UpdateSettingsRequest>("/settings", request, { sessionToken });
+export async function updateSettingsService(request: UpdateSettingsRequest): Promise<UpdateSettingsResponse> {
+    const response = await fetchWithSession((sessionToken) =>
+        VaultApiClient.sendPutRequest<UpdateSettingsResponse, UpdateSettingsRequest>("/settings", request, { sessionToken })
+    );
 
     if (response.error || !response.data) {
         throw new Error(response.errorDetails || response.error || "Failed to connect to Vault backend.");

@@ -1,35 +1,37 @@
 "use server";
 
-import { getSessionToken } from "@/shared/lib/session";
+import { withSafeAction } from "@/shared/lib/safe-action";
 import { getSettingsService, updateSettingsService } from "../services/settings.service";
 import { SettingsDto, UpdateSettingsRequest } from "@ai-vault/types";
 
-export async function getSettingsAction(): Promise<{ success: boolean; settings?: SettingsDto; error?: string }> {
-    try {
-        const token = await getSessionToken();
-        if (!token) {
-            return { success: false, error: "Not authenticated. Please unlock your vault." };
-        }
-
-        const data = await getSettingsService(token);
-        return { success: true, settings: data.settings };
-    } catch (error: any) {
-        console.error("Get Settings Error:", error);
-        return { success: false, error: error.message || "Failed to load settings." };
-    }
+export interface SettingsActionResult {
+  success: boolean;
+  settings?: SettingsDto;
+  error?: string;
 }
 
-export async function updateSettingsAction(request: UpdateSettingsRequest): Promise<{ success: boolean; settings?: SettingsDto; error?: string }> {
-    try {
-        const token = await getSessionToken();
-        if (!token) {
-            return { success: false, error: "Not authenticated. Please unlock your vault." };
-        }
+export async function getSettingsAction(): Promise<SettingsActionResult> {
+  const wrapped = withSafeAction("getSettingsAction", async () => {
+    const data = await getSettingsService();
+    return data.settings;
+  });
+  const res = await wrapped();
+  return {
+    success: res.success,
+    settings: res.data,
+    error: res.error,
+  };
+}
 
-        const data = await updateSettingsService(token, request);
-        return { success: true, settings: data.settings };
-    } catch (error: any) {
-        console.error("Update Settings Error:", error);
-        return { success: false, error: error.message || "Failed to update settings." };
-    }
+export async function updateSettingsAction(request: UpdateSettingsRequest): Promise<SettingsActionResult> {
+  const wrapped = withSafeAction("updateSettingsAction", async () => {
+    const data = await updateSettingsService(request);
+    return data.settings;
+  });
+  const res = await wrapped();
+  return {
+    success: res.success,
+    settings: res.data,
+    error: res.error,
+  };
 }
