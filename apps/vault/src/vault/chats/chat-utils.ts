@@ -1,6 +1,6 @@
 import { buildFieldAad } from "../keys.js";
 import { decryptBuffer } from "../crypto.js";
-import type { ChatRecord } from "../../db/repository/chats.repository.js";
+import type { chats as ChatRecord } from "@prisma/client";
 import { getSettings } from "../settings.js";
 import { executeAiCompletion } from "../ai/ai-provider.js";
 import { getApiKeyRecordById } from "../../db/repository/keys.repository.js";

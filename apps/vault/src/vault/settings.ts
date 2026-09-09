@@ -1,8 +1,9 @@
 import { vaultState } from "./state.js";
 import { encryptBuffer, decryptBuffer } from "./crypto.js";
 import { buildFieldAad } from "./keys.js";
-import { getSettingsRecord, upsertSettingsRecord, UpdateSettingsData } from "../db/repository/settings.repository.js";
+import { getSettingsRecord, upsertSettingsRecord } from "../db/repository/settings.repository.js";
 import type { SettingsDto, TokenTierDto } from "@ai-vault/types";
+import { Prisma } from "@prisma/client";
 
 export const DEFAULT_SYSTEM_PROMPT = "Be a friendly but 100% honest assistant. Truth is paramount regardless of emotions. Keep responses as concise as possible while remaining fully meaningful.";
 export const DEFAULT_TOKEN_TIERS: TokenTierDto[] = [
@@ -136,7 +137,7 @@ export async function updateSettings(
     targetId = newRecord.id;
   }
 
-  const updateData: UpdateSettingsData = {};
+  const updateData: Prisma.settingsUncheckedUpdateInput = {};
 
   await vaultState.withDbKey(sessionToken, (dbKey) => {
     const version = 1;

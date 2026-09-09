@@ -1,11 +1,8 @@
 import { getPrismaClient } from "../client.js";
-import { randomUUID } from "node:crypto";
-
-import { getPrismaClient } from "../client.js";
 import { Prisma, messages } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 
-export async function createMessageRecord(data: Prisma.messagesCreateInput): Promise<messages> {
+export async function createMessageRecord(data: Prisma.messagesUncheckedCreateInput): Promise<messages> {
   const prisma = getPrismaClient();
   return prisma.messages.create({
     data: {
@@ -65,8 +62,8 @@ export async function getLatestSequenceNumber(chatId: string): Promise<number> {
 
 export interface CreateMessagePairParams {
   chatId: string;
-  userMessage: Omit<Prisma.messagesCreateInput, "sequence_number" | "chat_id">;
-  assistantMessage: Omit<Prisma.messagesCreateInput, "sequence_number" | "chat_id">;
+  userMessage: Omit<Prisma.messagesUncheckedCreateInput, "sequence_number" | "chat_id">;
+  assistantMessage: Omit<Prisma.messagesUncheckedCreateInput, "sequence_number" | "chat_id">;
   chatUpdate?: Prisma.chatsUpdateInput;
 }
 
@@ -87,7 +84,7 @@ export async function createMessagePairWithSequence(
 
     const userRecord = await tx.messages.create({
       data: {
-        ...(params.userMessage as Prisma.messagesCreateInput),
+        ...(params.userMessage as Prisma.messagesUncheckedCreateInput),
         id: params.userMessage.id || randomUUID(),
         chat_id: params.chatId,
         sequence_number: latestSeq + 1,
@@ -99,7 +96,7 @@ export async function createMessagePairWithSequence(
 
     const assistantRecord = await tx.messages.create({
       data: {
-        ...(params.assistantMessage as Prisma.messagesCreateInput),
+        ...(params.assistantMessage as Prisma.messagesUncheckedCreateInput),
         id: params.assistantMessage.id || randomUUID(),
         chat_id: params.chatId,
         parent_message_id: userRecord.id,

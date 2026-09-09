@@ -5,9 +5,9 @@ import {
   createApiKeyRecord, 
   getAllApiKeys, 
   getApiKeyRecordById, 
-  deleteApiKeyRecord,
-  type ApiKeyRecord
+  deleteApiKeyRecord
 } from "../db/repository/keys.repository.js";
+import type { ai_api_keys as ApiKeyRecord } from "@prisma/client";
 import { AiApiKeyMetadata } from "@ai-vault/types";
 
 import { listModels } from "./models.js";
