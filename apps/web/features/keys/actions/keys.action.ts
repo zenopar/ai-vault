@@ -30,7 +30,7 @@ export type DeleteModelActionResult = {
   error?: string;
 };
 
-export const addApiKeySchema = z.object({
+const addApiKeySchema = z.object({
   provider: z.string().trim().min(1, "Please select an AI provider."),
   name: z.string().trim().min(1, "Please provide a name for this key."),
   apiKey: z.string().trim().min(1, "API Key cannot be empty."),
@@ -66,7 +66,7 @@ export async function deleteApiKeyAction(keyId: string): Promise<DeleteApiKeyAct
   };
 }
 
-export const addModelSchema = z.object({
+const addModelSchema = z.object({
   provider: z.string().trim().min(1, "Provider and Model Name are required."),
   name: z.string().trim().min(1, "Provider and Model Name are required."),
   displayName: z.string().trim().optional(),

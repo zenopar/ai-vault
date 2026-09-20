@@ -29,12 +29,27 @@ export const getChatMessagesAction = withSafeAction(
     getChatMessagesService(chatId, limit, offset, sort)
 );
 
-export const sendMessageSchema = z.object({
+const sendMessageSchema = z.object({
   chatId: z.string().optional().transform((val) => val || undefined),
   message: z.string().min(1, "Message cannot be empty."),
   provider: z.string().optional().transform((val) => val || undefined),
   model: z.string().optional().transform((val) => val || undefined),
   thinkingLevel: z.enum(["low", "medium", "high", "none"]).optional(),
+  fileIds: z
+    .string()
+    .optional()
+    .transform((val) => {
+      if (!val) return undefined;
+      try {
+        const parsed = JSON.parse(val);
+        return Array.isArray(parsed) ? (parsed as string[]) : undefined;
+      } catch {
+        return val
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+    }),
 });
 
 export const sendMessageAction = withSafeAction(

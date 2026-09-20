@@ -15,7 +15,7 @@ export type InitVaultActionResult = {
   error?: string;
 };
 
-export const initVaultSchema = z.object({
+const initVaultSchema = z.object({
   masterPassword: z
     .string()
     .min(16, "Master password must be between 16 and 128 characters long.")

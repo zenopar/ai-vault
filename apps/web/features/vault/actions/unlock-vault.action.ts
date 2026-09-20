@@ -15,7 +15,7 @@ export type UnlockVaultActionResult = {
   error?: string;
 };
 
-export const unlockVaultSchema = z.object({
+const unlockVaultSchema = z.object({
   altcha: z.string().min(1, "Proof of work (Altcha) is required. Please solve the captcha."),
   password: z.string().min(1, "Password or recovery code is required."),
 });
