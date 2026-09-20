@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { X, Loader2, AlertCircle, FileText, Film, File as FileIcon } from "lucide-react";
+import { Button } from "@/shared/components";
 import type { ChatAttachmentDto } from "@ai-vault/types";
 
 export interface PendingAttachment {
@@ -83,14 +84,16 @@ export function AttachmentPreviewDeck({ attachments, onRemove }: AttachmentPrevi
             </div>
 
             {/* Remove Button */}
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
               onClick={() => onRemove(att.localId)}
-              className="ml-1 p-1 rounded-full text-neutral-500 hover:text-white hover:bg-white/[0.1] transition-colors"
+              className="ml-1 h-5 w-5 p-0 rounded-full text-neutral-500 hover:text-white hover:bg-white/[0.1] shrink-0"
               title="Remove attachment"
             >
               <X className="w-3 h-3" />
-            </button>
+            </Button>
           </div>
         );
       })}

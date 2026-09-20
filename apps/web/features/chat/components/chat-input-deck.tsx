@@ -285,16 +285,18 @@ export function ChatInputDeck({
             {/* Left side: Attach Button & Selectors */}
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
               {/* Attach File Button */}
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={disabled}
-                className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.06] border border-white/[0.05] transition-colors shrink-0 flex items-center gap-1"
+                className="h-7 px-2.5 py-1 text-xs gap-1.5 shrink-0 rounded-lg text-neutral-300 hover:text-white border-white/[0.08]"
                 title="Attach images, videos, or files (stored encrypted in R2)"
               >
-                <Paperclip className="w-3.5 h-3.5 text-neutral-300" />
-                <span className="hidden md:inline text-[10.5px]">Attach</span>
-              </button>
+                <Paperclip className="w-3.5 h-3.5 text-neutral-400" />
+                <span className="hidden md:inline text-[11px]">Attach</span>
+              </Button>
 
               <input
                 ref={fileInputRef}

@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { X, Download, ExternalLink } from "lucide-react";
+import { Button } from "@/shared/components";
 import type { ChatAttachmentDto } from "@ai-vault/types";
 
 interface MediaLightboxProps {
@@ -44,13 +45,16 @@ export function MediaLightbox({ attachment, onClose }: MediaLightboxProps) {
             <Download className="w-3.5 h-3.5" />
             <span className="text-[11px]">Download</span>
           </a>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.1] transition-colors"
+            className="h-8 w-8 rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.1]"
+            title="Close"
           >
             <X className="w-5 h-5" />
-          </button>
+          </Button>
         </div>
       </div>
 
