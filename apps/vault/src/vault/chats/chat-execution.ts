@@ -7,7 +7,8 @@ import { createMessagePairWithSequence } from "../../db/repository/messages.repo
 import { getAllModels } from "../../db/repository/models.repository.js";
 import { getSettings } from "../settings.js";
 import { executeAiCompletion, type ChatMessagePrompt } from "../ai/ai-provider.js";
-import type { ChatMetadata, ChatMessageDto } from "@ai-vault/types";
+import { getFile } from "../files/file-service.js";
+import type { ChatMetadata, ChatMessageDto, ChatAttachmentDto } from "@ai-vault/types";
 
 import {
   decryptChatTitle,
@@ -25,6 +26,7 @@ export interface SendMessageParams {
   model?: string;
   thinkingLevel?: "low" | "medium" | "high" | "none";
   sessionToken: string;
+  fileIds?: string[];
 }
 
 export interface SendMessageResult {
@@ -88,7 +90,12 @@ async function calculateDynamicTokens(provider: string, model: string, tokenTier
   return { maxTokens, maxOutputTokens, inputPrice, outputPrice };
 }
 
-function buildPromptContext(existingMessages: ChatMessageDto[], newMessage: string, maxTokens: number): ChatMessagePrompt[] {
+function buildPromptContext(
+  existingMessages: ChatMessageDto[],
+  newMessage: string,
+  maxTokens: number,
+  images?: Array<{ mimeType: string; dataBase64: string }>
+): ChatMessagePrompt[] {
   const userMessageTokens = Math.ceil(newMessage.length / 4);
   let currentTokens = userMessageTokens;
 
@@ -107,7 +114,11 @@ function buildPromptContext(existingMessages: ChatMessageDto[], newMessage: stri
 
   return [
     ...includedMessages.map((m) => ({ role: m.role, content: m.content })),
-    { role: "user", content: newMessage },
+    {
+      role: "user",
+      content: newMessage,
+      images: images && images.length > 0 ? images : undefined,
+    },
   ];
 }
 
@@ -166,13 +177,40 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
       settings.tokenTiers
     );
 
+    // 0. Load any file attachments (and extract images for multimodal AI)
+    const userAttachments: ChatAttachmentDto[] = [];
+    const promptImages: Array<{ mimeType: string; dataBase64: string }> = [];
+
+    if (params.fileIds && params.fileIds.length > 0) {
+      for (const fileId of params.fileIds) {
+        try {
+          const fileData = await getFile(fileId, params.sessionToken);
+          userAttachments.push({
+            id: fileId,
+            chatId: params.chatId || null,
+            name: fileData.name,
+            mimeType: fileData.mimeType,
+            size: fileData.data.length,
+          });
+          if (fileData.mimeType.startsWith("image/")) {
+            promptImages.push({
+              mimeType: fileData.mimeType,
+              dataBase64: fileData.data.toString("base64"),
+            });
+          }
+        } catch (e) {
+          console.warn(`[sendMessageAndExecute] Failed to load file ${fileId}:`, e);
+        }
+      }
+    }
+
     // 1. Build context from existing chat history (if any)
     let promptContext: ChatMessagePrompt[];
     if (existingChat) {
       const { messages: existingMessages } = await getChatMessages(existingChat.id, params.sessionToken, 100, 0, "desc");
-      promptContext = buildPromptContext(existingMessages, trimmedMessage, maxTokens);
+      promptContext = buildPromptContext(existingMessages, trimmedMessage, maxTokens, promptImages);
     } else {
-      promptContext = buildPromptContext([], trimmedMessage, maxTokens);
+      promptContext = buildPromptContext([], trimmedMessage, maxTokens, promptImages);
     }
 
     // 1.5 Enforce Max Cost
@@ -413,6 +451,7 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
     // 7. Atomically commit both user message, assistant message, and chat cost update in ONE transaction
     const { userRecord, assistantRecord } = await createMessagePairWithSequence({
       chatId: chat.id,
+      fileIds: params.fileIds,
       userMessage: {
         id: userMsgId,
         role: "user",
@@ -444,6 +483,7 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
       content: trimmedMessage,
       sequenceNumber: userRecord.sequence_number,
       modelName: activeModel,
+      attachments: userAttachments.length > 0 ? userAttachments : undefined,
       createdAt: userRecord.created_at.toISOString(),
       updatedAt: userRecord.updated_at.toISOString(),
     };

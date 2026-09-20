@@ -1,9 +1,15 @@
 import { getAllApiKeys } from "../../db/repository/keys.repository.js";
 import { getDecryptedApiKey } from "../keys.js";
 
+export interface PromptImageAttachment {
+  mimeType: string;
+  dataBase64: string;
+}
+
 export interface ChatMessagePrompt {
   role: "user" | "assistant" | "system";
   content: string;
+  images?: PromptImageAttachment[];
 }
 
 export interface AiExecutionParams {
@@ -163,10 +169,26 @@ async function callGemini(
 
   const contents = messages
     .filter((m) => m.role !== "system")
-    .map((m) => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content }],
-    }));
+    .map((m) => {
+      const parts: any[] = [];
+      if (m.images && m.images.length > 0) {
+        for (const img of m.images) {
+          parts.push({
+            inline_data: {
+              mime_type: img.mimeType,
+              data: img.dataBase64,
+            },
+          });
+        }
+      }
+      if (m.content) {
+        parts.push({ text: m.content });
+      }
+      return {
+        role: m.role === "assistant" ? "model" : "user",
+        parts,
+      };
+    });
 
   const generationConfig: Record<string, any> = {
     max_output_tokens: maxOutputTokens,
@@ -243,10 +265,32 @@ async function callAnthropic(
   const systemMsg = messages.find((m) => m.role === "system");
   const conversation = messages
     .filter((m) => m.role !== "system")
-    .map((m) => ({
-      role: m.role === "assistant" ? "assistant" : "user",
-      content: m.content,
-    }));
+    .map((m) => {
+      if (!m.images || m.images.length === 0) {
+        return {
+          role: m.role === "assistant" ? "assistant" : "user",
+          content: m.content,
+        };
+      }
+      const parts: any[] = [];
+      for (const img of m.images) {
+        parts.push({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: img.mimeType,
+            data: img.dataBase64,
+          },
+        });
+      }
+      if (m.content) {
+        parts.push({ type: "text", text: m.content });
+      }
+      return {
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: parts,
+      };
+    });
 
   const payload: Record<string, any> = {
     model,
@@ -309,7 +353,24 @@ async function callOpenAiCompatible(
 ): Promise<{ text: string; inputTokens?: number; outputTokens?: number; thoughtTokens?: number; thinkingLevel?: string }> {
   const payload: Record<string, any> = {
     model,
-    messages: messages.map((m) => ({ role: m.role, content: m.content })),
+    messages: messages.map((m) => {
+      if (!m.images || m.images.length === 0) {
+        return { role: m.role, content: m.content };
+      }
+      const parts: any[] = [];
+      if (m.content) {
+        parts.push({ type: "text", text: m.content });
+      }
+      for (const img of m.images) {
+        parts.push({
+          type: "image_url",
+          image_url: {
+            url: `data:${img.mimeType};base64,${img.dataBase64}`,
+          },
+        });
+      }
+      return { role: m.role, content: parts };
+    }),
   };
 
   if (model.startsWith("o1") || model.startsWith("o3") || model.includes("gpt-5")) {

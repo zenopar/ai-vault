@@ -41,7 +41,10 @@ import {
   GetSettingsResponse,
   UpdateSettingsResponse,
   UpdateSettingsRequest,
+  UploadFileResponse,
+  ListChatFilesResponse,
 } from "@ai-vault/types";
+import { uploadFile, getFile, listChatFiles, FileNotFoundError } from "./vault/files/index.js";
 
 
 
@@ -89,6 +92,32 @@ function readJsonBody<T = any>(req: IncomingMessage): Promise<T> {
       for (const chunk of chunks) {
         chunk.fill(0);
       }
+      reject(err);
+    });
+  });
+}
+
+function readBodyBuffer(req: IncomingMessage, maxSize = 50 * 1024 * 1024): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+
+    req.on("data", (chunk: Buffer | string) => {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      size += buf.length;
+      if (size > maxSize) {
+        req.destroy();
+        reject(new Error("File too large. Maximum allowed size is 50 MB."));
+        return;
+      }
+      chunks.push(buf);
+    });
+
+    req.on("end", () => {
+      resolve(Buffer.concat(chunks, size));
+    });
+
+    req.on("error", (err) => {
       reject(err);
     });
   });
@@ -477,6 +506,7 @@ export function createVaultHttpServer() {
           provider?: string;
           model?: string;
           thinkingLevel?: "low" | "medium" | "high" | "none";
+          fileIds?: string[];
         }>(req);
 
         if (!authenticateSessionToken(req)) {
@@ -497,6 +527,7 @@ export function createVaultHttpServer() {
           provider: body.provider,
           model: body.model,
           thinkingLevel: body.thinkingLevel,
+          fileIds: body.fileIds,
           sessionToken,
         });
 
@@ -559,6 +590,115 @@ export function createVaultHttpServer() {
 
         await removeChat(chatId, sessionToken);
         sendJson(res, 200, { success: true });
+        return;
+      }
+
+      // 15.1 Upload a file (encrypted in R2 + metadata in DB)
+      if (method === "POST" && pathname === "/files/upload") {
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+        const sessionToken = req.headers["x-session-token"] as string;
+
+        const rawFileName = req.headers["x-file-name"] as string | undefined;
+        const rawMimeType = req.headers["x-mime-type"] as string | undefined;
+        const rawChatId = req.headers["x-chat-id"] as string | undefined;
+        const validChatId = rawChatId && UUID_REGEX.test(rawChatId) ? rawChatId : undefined;
+
+        let fileName = "attachment";
+        if (rawFileName) {
+          try {
+            fileName = decodeURIComponent(rawFileName);
+          } catch {
+            fileName = rawFileName;
+          }
+        }
+        const mimeType = rawMimeType || (req.headers["content-type"] as string) || "application/octet-stream";
+
+        try {
+          const fileBuffer = await readBodyBuffer(req, 50 * 1024 * 1024);
+          if (!fileBuffer || fileBuffer.length === 0) {
+            sendJson(res, 400, { error: "Empty file body provided." });
+            return;
+          }
+
+          const fileDto = await uploadFile(
+            {
+              fileBuffer,
+              fileName,
+              mimeType,
+              chatId: validChatId,
+            },
+            sessionToken
+          );
+
+          sendJson<UploadFileResponse>(res, 201, {
+            success: true,
+            file: fileDto,
+          });
+        } catch (err: any) {
+          console.error("File upload error:", err);
+          sendJson(res, 500, { error: err.message || "Failed to upload file." });
+        }
+        return;
+      }
+
+      // 15.2 Get decrypted file
+      if (method === "GET" && pathname.startsWith("/files/") && !pathname.endsWith("/upload")) {
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+        const sessionToken = req.headers["x-session-token"] as string;
+        const fileId = pathname.replace(/^\/files\//, "").trim();
+
+        if (!fileId) {
+          sendJson(res, 400, { error: "fileId is required." });
+          return;
+        }
+
+        try {
+          const fileResult = await getFile(fileId, sessionToken);
+          const encodedFileName = encodeURIComponent(fileResult.name);
+
+          res.writeHead(200, {
+            "Content-Type": fileResult.mimeType || "application/octet-stream",
+            "Content-Length": fileResult.data.length,
+            "Content-Disposition": `inline; filename="${encodedFileName}"; filename*=UTF-8''${encodedFileName}`,
+            "Cache-Control": "private, max-age=86400",
+          });
+          res.end(fileResult.data);
+        } catch (err: any) {
+          if (err instanceof FileNotFoundError) {
+            sendJson(res, 404, { error: "File not found." });
+          } else {
+            console.error("File download error:", err);
+            sendJson(res, 500, { error: err.message || "Failed to download file." });
+          }
+        }
+        return;
+      }
+
+      // 15.3 Get files for chat
+      if (method === "GET" && pathname.startsWith("/chats/") && pathname.endsWith("/files")) {
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+        const sessionToken = req.headers["x-session-token"] as string;
+        const chatId = pathname.replace(/^\/chats\//, "").replace(/\/files$/, "").trim();
+
+        try {
+          const files = await listChatFiles(chatId, sessionToken);
+          sendJson<ListChatFilesResponse>(res, 200, {
+            success: true,
+            files,
+          });
+        } catch (err: any) {
+          console.error("List chat files error:", err);
+          sendJson(res, 500, { error: err.message || "Failed to list chat files." });
+        }
         return;
       }
 

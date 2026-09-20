@@ -19,6 +19,7 @@ import {
   decryptChatTitle,
   ChatNotFoundError,
 } from "./chat-utils.js";
+import { getAttachmentsForMessages } from "../files/file-service.js";
 
 export interface CreateChatParams {
   id?: string;
@@ -163,6 +164,9 @@ export async function getChatMessages(
   const currentOffset = offset ?? 0;
   const hasMore = currentOffset + messageRecords.length < total;
 
+  const messageIds = messageRecords.map((m) => m.id);
+  const attachmentsMap = await getAttachmentsForMessages(messageIds, sessionToken);
+
   const messages = await vaultState.withDbKey(sessionToken, (dbKey) => {
     const list: ChatMessageDto[] = [];
 
@@ -228,12 +232,15 @@ export async function getChatMessages(
         }
       }
 
+      const messageAttachments = attachmentsMap.get(msg.id);
+
       list.push({
         id: msg.id,
         chatId: msg.chat_id,
         role: msg.role as "user" | "assistant" | "system",
         content,
         sequenceNumber: msg.sequence_number,
+        attachments: messageAttachments && messageAttachments.length > 0 ? messageAttachments : undefined,
         ...metadata,
         createdAt: msg.created_at.toISOString(),
         updatedAt: msg.updated_at.toISOString(),
