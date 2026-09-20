@@ -1,11 +1,25 @@
 "use client";
 
-import { useRef, useEffect, useLayoutEffect, useState, KeyboardEvent } from "react";
+import {
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  useCallback,
+  useImperativeHandle,
+  forwardRef,
+  KeyboardEvent,
+} from "react";
 import Link from "next/link";
-import { Paperclip } from "lucide-react";
-import { AiApiKeyMetadata, AiModelMetadata } from "@ai-vault/types";
+import { Paperclip, FolderOpen, FileText, Film, Check, Loader2, X } from "lucide-react";
+import { AiApiKeyMetadata, AiModelMetadata, ChatAttachmentDto } from "@ai-vault/types";
 import { Button, DropdownSelect } from "@/shared/components";
 import { AttachmentPreviewDeck, PendingAttachment } from "./attachment-preview-deck";
+
+export interface ChatInputDeckHandle {
+  attachFile: (dto: ChatAttachmentDto) => void;
+  focus: () => void;
+}
 
 interface ChatInputDeckProps {
   onSubmit: (message: string, fileIds?: string[]) => void;
@@ -23,25 +37,40 @@ interface ChatInputDeckProps {
 
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
-export function ChatInputDeck({
-  onSubmit,
-  disabled,
-  keys,
-  selectedKeyId,
-  setSelectedKeyId,
-  models,
-  selectedModel,
-  setSelectedModel,
-  thinkingLevel,
-  setThinkingLevel,
-  activeChatId,
-}: ChatInputDeckProps) {
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
+
+export const ChatInputDeck = forwardRef<ChatInputDeckHandle, ChatInputDeckProps>(function ChatInputDeck(
+  {
+    onSubmit,
+    disabled,
+    keys,
+    selectedKeyId,
+    setSelectedKeyId,
+    models,
+    selectedModel,
+    setSelectedModel,
+    thinkingLevel,
+    setThinkingLevel,
+    activeChatId,
+  }: ChatInputDeckProps,
+  ref
+) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState("");
   const [isFocused, setIsFocused] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const [showChatFilesPopover, setShowChatFilesPopover] = useState(false);
+  const [chatFiles, setChatFiles] = useState<ChatAttachmentDto[]>([]);
+  const [isLoadingChatFiles, setIsLoadingChatFiles] = useState(false);
 
   useIsomorphicLayoutEffect(() => {
     const el = textareaRef.current;
@@ -61,6 +90,9 @@ export function ChatInputDeck({
     const newPending: PendingAttachment[] = newFiles.map((file) => ({
       localId: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       file,
+      name: file.name,
+      size: file.size,
+      mimeType: file.type || "application/octet-stream",
       previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
       uploadStatus: "uploading",
     }));
@@ -70,7 +102,7 @@ export function ChatInputDeck({
     // Upload each file to /api/files/upload
     for (const item of newPending) {
       const formData = new FormData();
-      formData.append("file", item.file);
+      formData.append("file", item.file!);
       if (activeChatId) formData.append("chatId", activeChatId);
 
       try {
@@ -103,6 +135,68 @@ export function ChatInputDeck({
       }
     }
   };
+
+  const attachExistingFile = useCallback((dto: ChatAttachmentDto) => {
+    setAttachments((prev) => {
+      if (prev.some((a) => a.dto?.id === dto.id)) {
+        return prev;
+      }
+      const isImage = dto.mimeType.startsWith("image/");
+      const item: PendingAttachment = {
+        localId: `existing-${dto.id}-${Date.now()}`,
+        name: dto.name,
+        size: dto.size,
+        mimeType: dto.mimeType,
+        previewUrl: isImage ? `/api/files/${encodeURIComponent(dto.id)}` : undefined,
+        uploadStatus: "ready",
+        dto,
+        isExisting: true,
+      };
+      return [...prev, item];
+    });
+    textareaRef.current?.focus();
+  }, []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      attachFile: attachExistingFile,
+      focus: () => textareaRef.current?.focus(),
+    }),
+    [attachExistingFile]
+  );
+
+  const handleToggleChatFiles = async () => {
+    if (!showChatFilesPopover && activeChatId) {
+      setIsLoadingChatFiles(true);
+      try {
+        const res = await fetch(`/api/chats/${encodeURIComponent(activeChatId)}/files`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.files) {
+            setChatFiles(data.files);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load chat files:", e);
+      } finally {
+        setIsLoadingChatFiles(false);
+      }
+    }
+    setShowChatFilesPopover((prev) => !prev);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setShowChatFilesPopover(false);
+      }
+    };
+    if (showChatFilesPopover) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showChatFilesPopover]);
 
   const handleRemoveAttachment = (localId: string) => {
     setAttachments((prev) => {
@@ -298,6 +392,109 @@ export function ChatInputDeck({
                 <span className="hidden md:inline text-[11px]">Attach</span>
               </Button>
 
+              {/* Chat Files Button & Popover */}
+              {activeChatId && (
+                <div className="relative">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleToggleChatFiles}
+                    disabled={disabled}
+                    className="h-7 px-2 py-1 text-xs gap-1.5 shrink-0 rounded-lg text-neutral-400 hover:text-neutral-200 border border-white/[0.05]"
+                    title="Reuse a previously uploaded file from this chat"
+                  >
+                    <FolderOpen className="w-3.5 h-3.5 text-neutral-400" />
+                    <span className="hidden md:inline text-[11px]">Chat files</span>
+                  </Button>
+
+                  {/* Popover */}
+                  {showChatFilesPopover && (
+                    <div
+                      ref={popoverRef}
+                      className="absolute bottom-full left-0 mb-2 w-72 sm:w-80 bg-[#16171d] border border-white/[0.1] rounded-xl shadow-2xl p-2 z-40 animate-enter"
+                    >
+                      <div className="flex items-center justify-between px-2 py-1.5 border-b border-white/[0.06] mb-1 font-mono text-[11px] text-neutral-400">
+                        <span className="font-medium text-neutral-200">Files in this chat</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setShowChatFilesPopover(false)}
+                          className="h-4 w-4 p-0 text-neutral-400 hover:text-white"
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+
+                      {isLoadingChatFiles ? (
+                        <div className="flex items-center justify-center py-6 text-neutral-500 font-mono text-xs gap-2">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Loading files...</span>
+                        </div>
+                      ) : chatFiles.length === 0 ? (
+                        <div className="py-4 text-center text-neutral-500 font-mono text-xs">
+                          No files uploaded in this chat yet.
+                        </div>
+                      ) : (
+                        <div className="max-h-56 overflow-y-auto space-y-1">
+                          {chatFiles.map((file) => {
+                            const isAttached = attachments.some((a) => a.dto?.id === file.id);
+                            const isImage = file.mimeType.startsWith("image/");
+                            const isVideo = file.mimeType.startsWith("video/");
+
+                            return (
+                              <button
+                                key={file.id}
+                                type="button"
+                                onClick={() => {
+                                  if (!isAttached) attachExistingFile(file);
+                                }}
+                                disabled={isAttached}
+                                className={`w-full flex items-center justify-between p-1.5 rounded-lg text-left transition-colors font-mono text-xs ${
+                                  isAttached
+                                    ? "bg-white/[0.02] text-neutral-500 cursor-default"
+                                    : "hover:bg-white/[0.06] text-neutral-200 cursor-pointer"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0 flex-1 pr-2">
+                                  {isImage ? (
+                                    <div className="w-6 h-6 rounded bg-black/40 overflow-hidden shrink-0 border border-white/10">
+                                      <img
+                                        src={`/api/files/${encodeURIComponent(file.id)}`}
+                                        alt=""
+                                        className="w-full h-full object-cover"
+                                      />
+                                    </div>
+                                  ) : isVideo ? (
+                                    <Film className="w-4 h-4 text-sky-400 shrink-0" />
+                                  ) : (
+                                    <FileText className="w-4 h-4 text-indigo-400 shrink-0" />
+                                  )}
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-[11px] font-medium leading-tight">{file.name}</p>
+                                    <span className="text-[10px] text-neutral-500">{formatBytes(file.size)}</span>
+                                  </div>
+                                </div>
+                                {isAttached ? (
+                                  <span className="text-[10px] text-emerald-400 flex items-center gap-0.5 shrink-0">
+                                    <Check className="w-3 h-3" /> Attached
+                                  </span>
+                                ) : (
+                                  <span className="text-[10.5px] text-indigo-400 hover:text-indigo-300 shrink-0">
+                                    + Attach
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <input
                 ref={fileInputRef}
                 type="file"
@@ -388,4 +585,4 @@ export function ChatInputDeck({
       </div>
     </div>
   );
-}
+});

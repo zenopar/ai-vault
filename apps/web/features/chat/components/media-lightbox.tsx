@@ -1,16 +1,17 @@
 "use client";
 
 import { useEffect } from "react";
-import { X, Download, ExternalLink } from "lucide-react";
+import { X, Download, ExternalLink, Paperclip } from "lucide-react";
 import { Button } from "@/shared/components";
 import type { ChatAttachmentDto } from "@ai-vault/types";
 
 interface MediaLightboxProps {
   attachment: ChatAttachmentDto | null;
   onClose: () => void;
+  onAttach?: (att: ChatAttachmentDto) => void;
 }
 
-export function MediaLightbox({ attachment, onClose }: MediaLightboxProps) {
+export function MediaLightbox({ attachment, onClose, onAttach }: MediaLightboxProps) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -37,6 +38,22 @@ export function MediaLightbox({ attachment, onClose }: MediaLightboxProps) {
       >
         <span className="truncate max-w-md font-medium text-neutral-100">{attachment.name}</span>
         <div className="flex items-center gap-2">
+          {onAttach && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                onAttach(attachment);
+                onClose();
+              }}
+              className="gap-1.5 text-[11px] h-8 px-3 rounded-lg text-indigo-300 hover:text-white border-white/[0.12]"
+              title="Attach to new message (send to AI again)"
+            >
+              <Paperclip className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Attach to prompt</span>
+            </Button>
+          )}
           <a
             href={fileUrl}
             download={attachment.name}

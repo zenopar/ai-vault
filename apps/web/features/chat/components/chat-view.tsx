@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   ChatMetadata,
   ChatMessageDto,
+  ChatAttachmentDto,
   AiApiKeyMetadata,
   AiModelMetadata,
 } from "@ai-vault/types";
@@ -15,7 +16,7 @@ import {
 import { ChatSidebar } from "./chat-sidebar";
 import { ChatMessageItem } from "./chat-message-item";
 import { ThinkingAura } from "./thinking-aura";
-import { ChatInputDeck } from "./chat-input-deck";
+import { ChatInputDeck, type ChatInputDeckHandle } from "./chat-input-deck";
 import { ErrorAlert, Button } from "@/shared/components";
 import { AutoLockGuard } from "@/features/vault/components/auto-lock-guard";
 
@@ -66,7 +67,12 @@ export function ChatView({
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const inputDeckRef = useRef<ChatInputDeckHandle>(null);
   const shouldAutoScrollToBottomRef = useRef<boolean>(true);
+
+  const handleAttachFile = (file: ChatAttachmentDto) => {
+    inputDeckRef.current?.attachFile(file);
+  };
 
   useEffect(() => {
     if (shouldAutoScrollToBottomRef.current) {
@@ -300,14 +306,14 @@ export function ChatView({
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                       </svg>
-                      <span>Načítání starších zpráv...</span>
+                      <span>Loading earlier messages...</span>
                     </>
                   ) : (
                     <>
                       <svg className="w-3.5 h-3.5 text-neutral-400 group-hover:-translate-y-0.5 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
                       </svg>
-                      <span>Načíst předchozí zprávy</span>
+                      <span>Load previous messages</span>
                     </>
                   )}
                 </button>
@@ -317,7 +323,7 @@ export function ChatView({
             {!hasMore && messages.length > 10 && (
               <div className="flex items-center justify-center gap-2 my-6 text-[11px] font-mono tracking-wider text-neutral-500 uppercase">
                 <span className="w-8 h-px bg-white/[0.06]" />
-                <span>Začátek konverzace</span>
+                <span>Beginning of conversation</span>
                 <span className="w-8 h-px bg-white/[0.06]" />
               </div>
             )}
@@ -325,7 +331,7 @@ export function ChatView({
             {messages.length > 0 && (
               <div className="max-w-4xl mx-auto">
                 {messages.map((m) => (
-                  <ChatMessageItem key={m.id} message={m} />
+                  <ChatMessageItem key={m.id} message={m} onAttachFile={handleAttachFile} />
                 ))}
                 {isPending && <ThinkingAura modelName={selectedModel} thinkingLevel={thinkingLevel} />}
               </div>
@@ -335,6 +341,7 @@ export function ChatView({
           </div>
 
           <ChatInputDeck
+            ref={inputDeckRef}
             key={activeChatId || "new-chat"}
             onSubmit={handleSendMessage}
             disabled={isPending}

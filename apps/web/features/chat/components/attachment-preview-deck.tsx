@@ -7,11 +7,15 @@ import type { ChatAttachmentDto } from "@ai-vault/types";
 
 export interface PendingAttachment {
   localId: string;
-  file: File;
+  file?: File;
+  name: string;
+  size: number;
+  mimeType: string;
   previewUrl?: string;
   uploadStatus: "uploading" | "ready" | "error";
   error?: string;
   dto?: ChatAttachmentDto;
+  isExisting?: boolean;
 }
 
 interface AttachmentPreviewDeckProps {
@@ -33,8 +37,11 @@ export function AttachmentPreviewDeck({ attachments, onRemove }: AttachmentPrevi
   return (
     <div className="flex flex-wrap items-center gap-2 p-2.5 mb-2 bg-[#181920]/80 border border-white/[0.06] rounded-xl backdrop-blur-md animate-enter">
       {attachments.map((att) => {
-        const isImage = att.file.type.startsWith("image/");
-        const isVideo = att.file.type.startsWith("video/");
+        const fileName = att.file?.name || att.name;
+        const fileSize = att.file?.size ?? att.size;
+        const mimeType = att.file?.type || att.mimeType;
+        const isImage = mimeType.startsWith("image/");
+        const isVideo = mimeType.startsWith("video/");
 
         return (
           <div
@@ -46,7 +53,7 @@ export function AttachmentPreviewDeck({ attachments, onRemove }: AttachmentPrevi
               {isImage && att.previewUrl ? (
                 <img
                   src={att.previewUrl}
-                  alt={att.file.name}
+                  alt={fileName}
                   className="w-full h-full object-cover"
                 />
               ) : isVideo ? (
@@ -64,22 +71,22 @@ export function AttachmentPreviewDeck({ attachments, onRemove }: AttachmentPrevi
 
             {/* Name and Size */}
             <div className="min-w-0 flex-1 font-mono text-[11px]">
-              <p className="truncate text-neutral-200 font-medium leading-tight" title={att.file.name}>
-                {att.file.name}
+              <p className="truncate text-neutral-200 font-medium leading-tight" title={fileName}>
+                {fileName}
               </p>
               <div className="flex items-center gap-1 mt-0.5">
-                <span className="text-neutral-500 text-[10px]">{formatBytes(att.file.size)}</span>
-                {att.uploadStatus === "uploading" && (
+                <span className="text-neutral-500 text-[10px]">{formatBytes(fileSize)}</span>
+                {att.isExisting ? (
+                  <span className="text-sky-400 text-[10px]">· re-attached</span>
+                ) : att.uploadStatus === "uploading" ? (
                   <span className="text-indigo-400 text-[10px]">· encrypting...</span>
-                )}
-                {att.uploadStatus === "ready" && (
+                ) : att.uploadStatus === "ready" ? (
                   <span className="text-emerald-400/90 text-[10px]">· ready</span>
-                )}
-                {att.uploadStatus === "error" && (
+                ) : att.uploadStatus === "error" ? (
                   <span className="text-rose-400 text-[10px] flex items-center gap-0.5">
                     <AlertCircle className="w-2.5 h-2.5" /> error
                   </span>
-                )}
+                ) : null}
               </div>
             </div>
 

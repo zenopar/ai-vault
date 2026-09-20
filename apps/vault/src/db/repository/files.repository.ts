@@ -57,16 +57,43 @@ export async function linkFilesToMessage(
 ): Promise<void> {
   if (!fileIds || fileIds.length === 0) return;
   const client = tx || getPrismaClient();
-  await client.chat_files.updateMany({
+
+  const files = await client.chat_files.findMany({
     where: {
       id: { in: fileIds },
       status: "ACTIVE",
     },
-    data: {
-      message_id: messageId,
-      chat_id: chatId,
-    },
   });
+
+  for (const file of files) {
+    if (!file.message_id) {
+      // First-time attachment: link directly to this message
+      await client.chat_files.update({
+        where: { id: file.id },
+        data: {
+          message_id: messageId,
+          chat_id: chatId,
+        },
+      });
+    } else if (file.message_id !== messageId) {
+      // Re-referenced file from a previous message: clone record so earlier messages retain the attachment
+      await client.chat_files.create({
+        data: {
+          id: randomUUID(),
+          chat_id: chatId,
+          message_id: messageId,
+          encryption_version: file.encryption_version,
+          encrypted_file_name: file.encrypted_file_name,
+          file_name_iv: file.file_name_iv,
+          file_name_tag: file.file_name_tag,
+          mime_type: file.mime_type,
+          file_size: file.file_size,
+          r2_key: file.r2_key,
+          status: "ACTIVE",
+        },
+      });
+    }
+  }
 }
 
 export async function deleteFileRecord(id: string): Promise<chat_files> {
