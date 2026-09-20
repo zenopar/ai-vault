@@ -59,6 +59,12 @@ services:
       - DATABASE_URL=postgresql://${DB_USER:-vault}:${DB_PASSWORD:-supersecret}@db:5432/${DB_NAME:-ai_vault}
       - NODE_OPTIONS=--max-old-space-size=256
       - VAULT_IPC_SECRET=${VAULT_IPC_SECRET}
+      - R2_TOKEN_VALUE=${R2_TOKEN_VALUE:-}
+      - R2_ACCES_KEY_ID=${R2_ACCES_KEY_ID:-${R2_ACCESS_KEY_ID:-}}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID:-${R2_ACCES_KEY_ID:-}}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY:-}
+      - R2_URL=${R2_URL:-}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME:-}
     volumes:
       # RAM disk (tmpfs) for sharing IPC socket
       - ipc_socket:/var/run/ipc

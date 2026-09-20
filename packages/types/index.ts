@@ -106,6 +106,17 @@ export interface ListChatsResponse {
   error?: string;
 }
 
+export interface ChatAttachmentDto {
+  id: string;
+  chatId?: string | null;
+  messageId?: string | null;
+  name: string;
+  mimeType: string;
+  size: number;
+  createdAt?: string;
+  url?: string;
+}
+
 export interface ChatMessageDto {
   id: string;
   chatId: string;
@@ -122,6 +133,7 @@ export interface ChatMessageDto {
   outputCost?: number;
   thoughtCost?: number;
   totalCost?: number;
+  attachments?: ChatAttachmentDto[];
   createdAt: string;
   updatedAt: string;
 }
@@ -133,6 +145,8 @@ export interface SendChatMessageRequest {
   model?: string;
   thinkingLevel?: "low" | "medium" | "high" | "none" | string;
   sessionToken?: string;
+  fileIds?: string[];
+  attachments?: ChatAttachmentDto[];
 }
 
 export interface SendChatMessageResponse {
@@ -149,6 +163,18 @@ export interface GetChatMessagesResponse {
   messages?: ChatMessageDto[];
   hasMore?: boolean;
   total?: number;
+  error?: string;
+}
+
+export interface UploadFileResponse {
+  success: boolean;
+  file?: ChatAttachmentDto;
+  error?: string;
+}
+
+export interface ListChatFilesResponse {
+  success: boolean;
+  files?: ChatAttachmentDto[];
   error?: string;
 }
 

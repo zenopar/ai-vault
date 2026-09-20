@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@ai-vault/types": "*",
+    "@aws-sdk/client-s3": "^3.1136.0",
     "@node-rs/argon2": "^2.1.0",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
