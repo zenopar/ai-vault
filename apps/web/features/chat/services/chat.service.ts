@@ -76,6 +76,7 @@ export async function sendMessageService(params: {
   provider?: string;
   model?: string;
   thinkingLevel?: "low" | "medium" | "high" | "none" | string;
+  fileIds?: string[];
 }): Promise<SendChatMessageResponse> {
   const response = await fetchWithSession((sessionToken) =>
     VaultApiClient.sendPostRequest<SendChatMessageResponse>(
@@ -86,6 +87,7 @@ export async function sendMessageService(params: {
         provider: params.provider,
         model: params.model,
         thinkingLevel: params.thinkingLevel,
+        fileIds: params.fileIds,
       },
       { sessionToken }
     )

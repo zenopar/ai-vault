@@ -120,4 +120,85 @@ export class VaultApiClient {
   static async sendDeleteRequest<T>(path: string, options?: VaultRequestOptions): Promise<VaultResponse<T>> {
     return this.request<T>("DELETE", path, undefined, options);
   }
-}
+
+  static requestBinary(
+    method: string,
+    path: string,
+    body?: Buffer,
+    options?: VaultRequestOptions & { customHeaders?: Record<string, string> }
+  ): Promise<{
+    statusCode: number;
+    contentType?: string;
+    contentDisposition?: string;
+    data?: Buffer;
+    error?: string;
+  }> {
+    return new Promise((resolve) => {
+      const isUnixSocket = this.vaultUrl.startsWith("unix://");
+      const headers: Record<string, string> = {
+        ...this.buildHeaders(options),
+        ...(options?.customHeaders || {}),
+      };
+
+      if (body) {
+        headers["Content-Length"] = Buffer.byteLength(body).toString();
+        if (!options?.customHeaders?.["Content-Type"] && !options?.customHeaders?.["content-type"]) {
+          headers["Content-Type"] = "application/octet-stream";
+        }
+      }
+
+      let reqOptions: http.RequestOptions;
+      if (isUnixSocket) {
+        reqOptions = {
+          socketPath: this.vaultUrl.replace("unix://", ""),
+          path: path,
+          method: method,
+          headers,
+        };
+      } else {
+        const url = new URL(path, this.vaultUrl);
+        reqOptions = {
+          hostname: url.hostname,
+          port: url.port,
+          path: url.pathname + url.search,
+          method: method,
+          headers,
+        };
+      }
+
+      const req = http.request(reqOptions, (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        res.on("end", () => {
+          const statusCode = res.statusCode || 500;
+          const data = Buffer.concat(chunks);
+          const contentType = res.headers["content-type"];
+          const contentDisposition = res.headers["content-disposition"];
+
+          if (statusCode >= 200 && statusCode < 300) {
+            resolve({ statusCode, contentType, contentDisposition, data });
+          } else {
+            let errorMsg = `Vault error ${statusCode}`;
+            try {
+              const errObj = JSON.parse(data.toString("utf-8"));
+              if (errObj.error) errorMsg = errObj.error;
+            } catch {}
+            resolve({ statusCode, contentType, error: errorMsg, data });
+          }
+        });
+      });
+
+      req.on("error", (error) => {
+        console.error(`${method} binary request failed to ${path}:`, error);
+        resolve({ statusCode: 500, error: error.message });
+      });
+
+      if (body) {
+        req.write(body);
+      }
+      req.end();
+    });
+  }
+}
