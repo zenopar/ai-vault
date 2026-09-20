@@ -89,6 +89,7 @@ export function createInMemoryPrismaMock() {
   const chatsMap = new Map<string, any>();
   const messagesMap = new Map<string, any>();
   const modelsMap = new Map<string, any>();
+  const chatFilesMap = new Map<string, any>();
 
   const initDefaultModels = () => {
     modelsMap.clear();
@@ -359,6 +360,54 @@ export function createInMemoryPrismaMock() {
         return { count: 1 };
       }),
     },
+    chat_files: {
+      findMany: vi.fn(async (args?: any) => {
+        let list = Array.from(chatFilesMap.values());
+        if (args?.where?.message_id?.in) {
+          const ids = new Set(args.where.message_id.in);
+          list = list.filter((f) => ids.has(f.message_id));
+        }
+        if (args?.where?.chat_id) {
+          list = list.filter((f) => f.chat_id === args.where.chat_id);
+        }
+        if (args?.where?.status) {
+          list = list.filter((f) => f.status === args.where.status);
+        }
+        return list;
+      }),
+      findFirst: vi.fn(async ({ where }: any) => {
+        for (const file of chatFilesMap.values()) {
+          if (where?.id && file.id !== where.id) continue;
+          if (where?.status && file.status !== where.status) continue;
+          return { ...file };
+        }
+        return null;
+      }),
+      create: vi.fn(async ({ data }: any) => {
+        const record = {
+          id: data.id || "file-mock-uuid",
+          status: "ACTIVE",
+          ...data,
+          created_at: new Date(),
+          updated_at: new Date(),
+        };
+        chatFilesMap.set(record.id, record);
+        return { ...record };
+      }),
+      updateMany: vi.fn(async ({ where, data }: any) => {
+        let count = 0;
+        for (const file of chatFilesMap.values()) {
+          if (where?.id?.in && !where.id.in.includes(file.id)) continue;
+          Object.assign(file, data, { updated_at: new Date() });
+          count++;
+        }
+        return { count };
+      }),
+      deleteMany: vi.fn(async () => {
+        chatFilesMap.clear();
+        return { count: 1 };
+      }),
+    },
     $disconnect: vi.fn(async () => {}),
   };
 
@@ -372,12 +421,14 @@ export function createInMemoryPrismaMock() {
       apiKeysMap.clear();
       chatsMap.clear();
       messagesMap.clear();
+      chatFilesMap.clear();
       initDefaultModels();
     },
     getVaultConfig: () => vaultConfigRecord,
     getApiKeys: () => apiKeysMap,
     getChats: () => chatsMap,
     getMessages: () => messagesMap,
+    getChatFiles: () => chatFilesMap,
     getModels: () => modelsMap,
   };
 }
