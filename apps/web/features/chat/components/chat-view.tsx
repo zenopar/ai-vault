@@ -175,9 +175,9 @@ export function ChatView({
     }
   };
 
-  const handleSendMessage = async (messageText: string) => {
+  const handleSendMessage = async (messageText: string, fileIds?: string[]) => {
     const trimmed = messageText.trim();
-    if (!trimmed || isPending) return;
+    if ((!trimmed && (!fileIds || fileIds.length === 0)) || isPending) return;
     setError(null);
     shouldAutoScrollToBottomRef.current = true;
 
@@ -202,6 +202,9 @@ export function ChatView({
     formData.append("provider", provider);
     formData.append("model", selectedModel);
     formData.append("thinkingLevel", thinkingLevel);
+    if (fileIds && fileIds.length > 0) {
+      formData.append("fileIds", JSON.stringify(fileIds));
+    }
 
     setIsPending(true);
     try {
@@ -343,6 +346,7 @@ export function ChatView({
             setSelectedModel={setSelectedModel}
             thinkingLevel={thinkingLevel}
             setThinkingLevel={setThinkingLevel}
+            activeChatId={activeChatId}
           />
         </main>
       </div>
