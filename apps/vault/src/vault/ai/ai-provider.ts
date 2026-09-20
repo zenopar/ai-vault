@@ -274,14 +274,25 @@ async function callAnthropic(
       }
       const parts: any[] = [];
       for (const img of m.images) {
-        parts.push({
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: img.mimeType,
-            data: img.dataBase64,
-          },
-        });
+        if (img.mimeType === "application/pdf") {
+          parts.push({
+            type: "document",
+            source: {
+              type: "base64",
+              media_type: "application/pdf",
+              data: img.dataBase64,
+            },
+          });
+        } else if (img.mimeType.startsWith("image/")) {
+          parts.push({
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: img.mimeType,
+              data: img.dataBase64,
+            },
+          });
+        }
       }
       if (m.content) {
         parts.push({ type: "text", text: m.content });
@@ -362,12 +373,14 @@ async function callOpenAiCompatible(
         parts.push({ type: "text", text: m.content });
       }
       for (const img of m.images) {
-        parts.push({
-          type: "image_url",
-          image_url: {
-            url: `data:${img.mimeType};base64,${img.dataBase64}`,
-          },
-        });
+        if (img.mimeType.startsWith("image/")) {
+          parts.push({
+            type: "image_url",
+            image_url: {
+              url: `data:${img.mimeType};base64,${img.dataBase64}`,
+            },
+          });
+        }
       }
       return { role: m.role, content: parts };
     }),

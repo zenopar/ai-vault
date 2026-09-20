@@ -177,9 +177,10 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
       settings.tokenTiers
     );
 
-    // 0. Load any file attachments (and extract images for multimodal AI)
+    // 0. Load any file attachments (and extract images/docs for multimodal AI)
     const userAttachments: ChatAttachmentDto[] = [];
     const promptImages: Array<{ mimeType: string; dataBase64: string }> = [];
+    let textAttachmentsContent = "";
 
     if (params.fileIds && params.fileIds.length > 0) {
       for (const fileId of params.fileIds) {
@@ -192,11 +193,31 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
             mimeType: fileData.mimeType,
             size: fileData.data.length,
           });
-          if (fileData.mimeType.startsWith("image/")) {
+
+          const isPdf =
+            fileData.mimeType === "application/pdf" ||
+            fileData.name.toLowerCase().endsWith(".pdf");
+          const isImage = fileData.mimeType.startsWith("image/");
+          const isText =
+            fileData.mimeType.startsWith("text/") ||
+            fileData.mimeType === "application/json" ||
+            fileData.mimeType === "application/javascript" ||
+            fileData.mimeType === "application/typescript" ||
+            fileData.mimeType === "application/xml" ||
+            /\.(txt|md|json|csv|tsv|ts|js|jsx|tsx|py|sql|html|css|yaml|yml|xml|sh|env)$/i.test(fileData.name);
+
+          if (isImage || isPdf) {
             promptImages.push({
-              mimeType: fileData.mimeType,
+              mimeType: isPdf ? "application/pdf" : fileData.mimeType,
               dataBase64: fileData.data.toString("base64"),
             });
+          } else if (isText) {
+            try {
+              const text = fileData.data.toString("utf-8");
+              textAttachmentsContent += `\n\n[Attached File: ${fileData.name}]\n\`\`\`\n${text}\n\`\`\``;
+            } catch (err) {
+              console.warn(`Failed to decode text file ${fileData.name}:`, err);
+            }
           }
         } catch (e) {
           console.warn(`[sendMessageAndExecute] Failed to load file ${fileId}:`, e);
@@ -204,13 +225,17 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
       }
     }
 
+    const effectiveMessage = textAttachmentsContent
+      ? `${trimmedMessage}${textAttachmentsContent}`
+      : trimmedMessage;
+
     // 1. Build context from existing chat history (if any)
     let promptContext: ChatMessagePrompt[];
     if (existingChat) {
       const { messages: existingMessages } = await getChatMessages(existingChat.id, params.sessionToken, 100, 0, "desc");
-      promptContext = buildPromptContext(existingMessages, trimmedMessage, maxTokens, promptImages);
+      promptContext = buildPromptContext(existingMessages, effectiveMessage, maxTokens, promptImages);
     } else {
-      promptContext = buildPromptContext([], trimmedMessage, maxTokens, promptImages);
+      promptContext = buildPromptContext([], effectiveMessage, maxTokens, promptImages);
     }
 
     // 1.5 Enforce Max Cost
