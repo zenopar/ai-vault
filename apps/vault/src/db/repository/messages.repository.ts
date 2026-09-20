@@ -65,10 +65,11 @@ export interface CreateMessagePairParams {
   userMessage: Omit<Prisma.messagesUncheckedCreateInput, "sequence_number" | "chat_id">;
   assistantMessage: Omit<Prisma.messagesUncheckedCreateInput, "sequence_number" | "chat_id">;
   chatUpdate?: Prisma.chatsUpdateInput;
+  fileIds?: string[];
 }
 
 /**
- * Atomically creates both user and assistant message records and updates chat tokens/costs in a single transaction.
+ * Atomically creates both user and assistant message records, links file attachments, and updates chat tokens/costs in a single transaction.
  */
 export async function createMessagePairWithSequence(
   params: CreateMessagePairParams
@@ -106,6 +107,19 @@ export async function createMessagePairWithSequence(
         status: params.assistantMessage.status ?? "ACTIVE",
       },
     });
+
+    if (params.fileIds && params.fileIds.length > 0) {
+      await tx.chat_files.updateMany({
+        where: {
+          id: { in: params.fileIds },
+          status: "ACTIVE",
+        },
+        data: {
+          message_id: userRecord.id,
+          chat_id: params.chatId,
+        },
+      });
+    }
 
     if (params.chatUpdate) {
       await tx.chats.update({
