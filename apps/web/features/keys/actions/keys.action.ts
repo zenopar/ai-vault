@@ -70,11 +70,22 @@ const addModelSchema = z.object({
   provider: z.string().trim().min(1, "Provider and Model Name are required."),
   name: z.string().trim().min(1, "Provider and Model Name are required."),
   displayName: z.string().trim().optional(),
-}).transform((val) => ({
-  provider: val.provider,
-  name: val.name,
-  displayName: val.displayName || val.name,
-}));
+  inputPricePer1m: z.string().trim().optional(),
+  outputPricePer1m: z.string().trim().optional(),
+}).transform((val) => {
+  const parsePrice = (s?: string) => {
+    if (!s || s === "") return undefined;
+    const n = parseFloat(s.replace(",", "."));
+    return Number.isNaN(n) || n < 0 ? undefined : n;
+  };
+  return {
+    provider: val.provider,
+    name: val.name,
+    displayName: val.displayName || val.name,
+    inputPricePer1m: parsePrice(val.inputPricePer1m),
+    outputPricePer1m: parsePrice(val.outputPricePer1m),
+  };
+});
 
 export async function addModelAction(formData: FormData): Promise<AddModelActionResult> {
   const wrapped = withSafeAction("addModelAction", async () => {

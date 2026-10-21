@@ -24,6 +24,8 @@ function AddCustomModel({ provider, onAdded }: { provider: string; onAdded: (mod
   const [isOpen, setIsOpen] = useState(false);
   const [name, setName] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [inputPrice, setInputPrice] = useState("");
+  const [outputPrice, setOutputPrice] = useState("");
   const [isPending, startTransition] = useTransition();
 
   if (!isOpen) {
@@ -42,6 +44,12 @@ function AddCustomModel({ provider, onAdded }: { provider: string; onAdded: (mod
     formData.append("provider", provider);
     formData.append("name", name.trim());
     formData.append("displayName", displayName.trim() || name.trim());
+    if (inputPrice.trim()) {
+      formData.append("inputPricePer1m", inputPrice.trim());
+    }
+    if (outputPrice.trim()) {
+      formData.append("outputPricePer1m", outputPrice.trim());
+    }
 
     startTransition(async () => {
       const res = await addModelAction(formData);
@@ -50,6 +58,8 @@ function AddCustomModel({ provider, onAdded }: { provider: string; onAdded: (mod
         setIsOpen(false);
         setName("");
         setDisplayName("");
+        setInputPrice("");
+        setOutputPrice("");
       } else {
         alert(res.error || "Failed to add model");
       }
@@ -57,11 +67,11 @@ function AddCustomModel({ provider, onAdded }: { provider: string; onAdded: (mod
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-wrap items-center gap-2 mt-2 p-1.5 bg-white/[0.02] border border-white/[0.05] rounded-xl w-fit">
-      <div className="w-[150px]">
+    <form onSubmit={handleSubmit} className="flex flex-wrap items-center gap-2 mt-2 p-2 bg-white/[0.02] border border-white/[0.05] rounded-xl w-fit">
+      <div className="w-[145px]">
         <Input
           type="text"
-          placeholder="e.g. phi3:mini"
+          placeholder="Model ID (e.g. gpt-5)"
           value={name}
           onChange={(e) => setName(e.target.value)}
           className="h-8 text-[11px] px-2.5 bg-[#14151a]"
@@ -69,13 +79,37 @@ function AddCustomModel({ provider, onAdded }: { provider: string; onAdded: (mod
           required
         />
       </div>
-      <div className="w-[150px]">
+      <div className="w-[140px]">
         <Input
           type="text"
           placeholder="Display Name"
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
           className="h-8 text-[11px] px-2.5 bg-[#14151a]"
+        />
+      </div>
+      <div className="w-[120px]">
+        <Input
+          type="number"
+          step="any"
+          min="0"
+          placeholder="In $/1M tokens"
+          value={inputPrice}
+          onChange={(e) => setInputPrice(e.target.value)}
+          className="h-8 text-[11px] px-2.5 bg-[#14151a]"
+          isMono
+        />
+      </div>
+      <div className="w-[120px]">
+        <Input
+          type="number"
+          step="any"
+          min="0"
+          placeholder="Out $/1M tokens"
+          value={outputPrice}
+          onChange={(e) => setOutputPrice(e.target.value)}
+          className="h-8 text-[11px] px-2.5 bg-[#14151a]"
+          isMono
         />
       </div>
       <Button type="submit" size="sm" isLoading={isPending} className="h-8 px-3 text-[11px] bg-white text-black hover:bg-neutral-200">
@@ -276,8 +310,13 @@ export function KeysManager({ initialKeys }: KeysManagerProps) {
                       <div className="pt-1 flex flex-wrap gap-1.5">
                         {k.models.map((model) => (
                           <div key={model.id} className="group relative flex items-center bg-white/[0.03] border border-white/[0.05] rounded-md transition-colors hover:bg-white/[0.05]">
-                            <span className="px-2 py-0.5 text-neutral-300 text-[11px] font-mono cursor-default" title={model.description || model.displayName}>
-                              {model.displayName || model.name}
+                            <span className="px-2 py-0.5 text-neutral-300 text-[11px] font-mono cursor-default flex items-center gap-1.5" title={model.description || model.displayName}>
+                              <span>{model.displayName || model.name}</span>
+                              {(model.inputPricePer1m != null || model.outputPricePer1m != null) && (
+                                <span className="text-[10px] text-neutral-500">
+                                  (${model.inputPricePer1m ?? 0}/${model.outputPricePer1m ?? 0})
+                                </span>
+                              )}
                             </span>
                             <button
                               type="button"

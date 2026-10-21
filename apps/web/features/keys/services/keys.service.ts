@@ -66,12 +66,16 @@ export async function addModelService(params: {
   provider: string;
   name: string;
   displayName: string;
+  inputPricePer1m?: number | null;
+  outputPricePer1m?: number | null;
 }): Promise<AiModelMetadata> {
   const response = await fetchWithSession((sessionToken) =>
     VaultApiClient.sendPostRequest<{ success: boolean; model?: AiModelMetadata; error?: string }>("/models", {
       provider: params.provider,
       name: params.name,
       displayName: params.displayName,
+      inputPricePer1m: params.inputPricePer1m,
+      outputPricePer1m: params.outputPricePer1m,
       sessionToken,
     }, {
       sessionToken,

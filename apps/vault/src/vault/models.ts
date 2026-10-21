@@ -15,6 +15,8 @@ function mapModelRecordToMetadata(record: ModelRecord): AiModelMetadata {
     displayName: record.display_name,
     description: record.description,
     contextWindow: record.context_window,
+    inputPricePer1m: record.input_price_per_1m != null ? Number(record.input_price_per_1m) : null,
+    outputPricePer1m: record.output_price_per_1m != null ? Number(record.output_price_per_1m) : null,
     isActive: record.is_active,
     createdAt: record.created_at.toISOString(),
     updatedAt: record.updated_at.toISOString(),
@@ -49,12 +51,16 @@ export async function addModel(params: {
   name: string;
   displayName: string;
   description?: string;
+  inputPricePer1m?: number | null;
+  outputPricePer1m?: number | null;
 }): Promise<AiModelMetadata> {
   const record = await createModelRecord({
     provider: params.provider,
     name: params.name,
     display_name: params.displayName,
     description: params.description,
+    input_price_per_1m: params.inputPricePer1m ?? undefined,
+    output_price_per_1m: params.outputPricePer1m ?? undefined,
   });
   return mapModelRecordToMetadata(record);
 }
