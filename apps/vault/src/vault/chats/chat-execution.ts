@@ -6,6 +6,7 @@ import { getChatRecordById } from "../../db/repository/chats.repository.js";
 import { createMessagePairWithSequence } from "../../db/repository/messages.repository.js";
 import { getAllModels } from "../../db/repository/models.repository.js";
 import { getSettings } from "../settings.js";
+import { getProject } from "../projects.js";
 import { executeAiCompletion, type ChatMessagePrompt } from "../ai/ai-provider.js";
 import { getFile } from "../files/file-service.js";
 import type { ChatMetadata, ChatMessageDto, ChatAttachmentDto } from "@ai-vault/types";
@@ -21,6 +22,7 @@ import { createChat, getChatMessages } from "./chat-crud.js";
 
 export interface SendMessageParams {
   chatId?: string;
+  projectId?: string | null;
   message: string;
   provider?: string;
   model?: string;
@@ -146,6 +148,7 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
       const fields = decryptChatFields(chatRecord, dbKey);
       return {
         id: chatRecord.id,
+        projectId: (chatRecord as any).project_id ?? null,
         title,
         status: chatRecord.status,
         metadata: fields.metadata,
@@ -168,9 +171,20 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
 
   try {
     const activeProvider = params.provider || existingChat?.metadata?.provider || "google";
-    const activeModel = params.model || existingChat?.metadata?.model || "gemini-3.7-flash";
+    const activeModel = params.model || existingChat?.metadata?.model || "gemini-3.8-flash";
 
     const settings = await getSettings(params.sessionToken);
+    const effectiveProjectId = existingChat ? (existingChat.projectId ?? null) : (params.projectId ?? null);
+    let effectiveSystemPrompt = settings.systemPrompt;
+
+    if (effectiveProjectId) {
+      try {
+        const project = await getProject(effectiveProjectId, params.sessionToken);
+        effectiveSystemPrompt = project.systemPrompt;
+      } catch (e) {
+        console.warn(`Failed to load project ${effectiveProjectId} system prompt, falling back to global:`, e);
+      }
+    }
     const { maxTokens, maxOutputTokens, inputPrice, outputPrice, modelId } = await calculateDynamicTokens(
       activeProvider,
       activeModel,
@@ -277,7 +291,7 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
       thinkingLevel: params.thinkingLevel,
       maxOutputTokens: finalMaxOutputTokens,
       sessionToken: params.sessionToken,
-      systemPrompt: settings.systemPrompt,
+      systemPrompt: effectiveSystemPrompt,
     });
 
     // 3. AI execution succeeded! Prepare chat metadata
@@ -287,6 +301,7 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
     } else {
       chat = await createChat(
         {
+          projectId: effectiveProjectId,
           title: await deriveTitleFromPrompt(trimmedMessage, params.sessionToken),
           metadata: { provider: params.provider || null, model: params.model || null },
         },

@@ -2,7 +2,7 @@ import { getPrismaClient } from "../client.js";
 import { Prisma, chats } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 
-export async function createChatRecord(data: Prisma.chatsCreateInput): Promise<chats> {
+export async function createChatRecord(data: Prisma.chatsUncheckedCreateInput): Promise<chats> {
   const prisma = getPrismaClient();
   return prisma.chats.create({
     data: {
@@ -21,10 +21,14 @@ export async function getChatRecordById(id: string): Promise<chats | null> {
   });
 }
 
-export async function getAllChatsRecords(limit?: number, offset?: number): Promise<chats[]> {
+export async function getAllChatsRecords(limit?: number, offset?: number, projectId?: string | null): Promise<chats[]> {
   const prisma = getPrismaClient();
+  const where: Prisma.chatsWhereInput = { status: "ACTIVE" };
+  if (projectId !== undefined) {
+    where.project_id = projectId;
+  }
   return prisma.chats.findMany({
-    where: { status: "ACTIVE" },
+    where,
     orderBy: { updated_at: "desc" },
     take: limit,
     skip: offset,

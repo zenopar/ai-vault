@@ -21,6 +21,13 @@ import {
   removeChat,
   ChatNotFoundError
 } from "./vault/chats/index.js";
+import {
+  listProjects,
+  createProject,
+  updateProject,
+  removeProject,
+  ProjectNotFoundError,
+} from "./vault/projects.js";
 import { getAnalyticsSummary } from "./vault/analytics/index.js";
 import { getSettings, updateSettings } from "./vault/settings.js";
 import { NoActiveApiKeyError, UnsupportedProviderError } from "./vault/ai/ai-provider.js";
@@ -43,6 +50,8 @@ import {
   UpdateSettingsRequest,
   UploadFileResponse,
   ListChatFilesResponse,
+  ListProjectsResponse,
+  ProjectResponse,
 } from "@ai-vault/types";
 import { uploadFile, getFile, listChatFiles, FileNotFoundError } from "./vault/files/index.js";
 
@@ -433,7 +442,14 @@ export function createVaultHttpServer() {
           return;
         }
 
-        const body = await readJsonBody<{ provider?: string; name?: string; displayName?: string; description?: string }>(req);
+        const body = await readJsonBody<{
+          provider?: string;
+          name?: string;
+          displayName?: string;
+          description?: string;
+          inputPricePer1m?: number | null;
+          outputPricePer1m?: number | null;
+        }>(req);
         if (!body.provider || !body.name || !body.displayName) {
           sendJson(res, 400, { error: "provider, name, and displayName are required." });
           return;
@@ -445,6 +461,8 @@ export function createVaultHttpServer() {
             name: body.name,
             displayName: body.displayName,
             description: body.description,
+            inputPricePer1m: body.inputPricePer1m,
+            outputPricePer1m: body.outputPricePer1m,
           });
           sendJson(res, 201, { success: true, model: newModel });
         } catch (error: any) {
@@ -474,6 +492,70 @@ export function createVaultHttpServer() {
         return;
       }
 
+      // 11.5 Projects CRUD
+      if (method === "GET" && pathname === "/projects") {
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+        const sessionToken = req.headers["x-session-token"] as string;
+        const projects = await listProjects(sessionToken);
+        sendJson<ListProjectsResponse>(res, 200, { success: true, projects });
+        return;
+      }
+
+      if (method === "POST" && pathname === "/projects") {
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+        const sessionToken = req.headers["x-session-token"] as string;
+        const body = await readJsonBody<{ name?: string; systemPrompt?: string }>(req);
+        if (!body.name || typeof body.name !== "string" || !body.name.trim()) {
+          sendJson(res, 400, { error: "name is required and must be a non-empty string." });
+          return;
+        }
+        const project = await createProject(
+          { name: body.name, systemPrompt: body.systemPrompt },
+          sessionToken
+        );
+        sendJson<ProjectResponse>(res, 201, { success: true, project });
+        return;
+      }
+
+      if (method === "PUT" && pathname.startsWith("/projects/")) {
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+        const sessionToken = req.headers["x-session-token"] as string;
+        const projectId = pathname.replace(/^\/projects\//, "").trim();
+        if (!projectId || !UUID_REGEX.test(projectId)) {
+          sendJson(res, 400, { error: "A valid Project ID (UUID) is required." });
+          return;
+        }
+        const body = await readJsonBody<{ name?: string; systemPrompt?: string }>(req);
+        const project = await updateProject(projectId, body, sessionToken);
+        sendJson<ProjectResponse>(res, 200, { success: true, project });
+        return;
+      }
+
+      if (method === "DELETE" && pathname.startsWith("/projects/")) {
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+        const sessionToken = req.headers["x-session-token"] as string;
+        const projectId = pathname.replace(/^\/projects\//, "").trim();
+        if (!projectId || !UUID_REGEX.test(projectId)) {
+          sendJson(res, 400, { error: "A valid Project ID (UUID) is required." });
+          return;
+        }
+        await removeProject(projectId, sessionToken);
+        sendJson(res, 200, { success: true });
+        return;
+      }
+
       // 12. List all chats
       if (method === "GET" && pathname === "/chats") {
         if (!authenticateSessionToken(req)) {
@@ -484,16 +566,18 @@ export function createVaultHttpServer() {
         const sessionToken = req.headers["x-session-token"] as string;
         const limitParam = url.searchParams.get("limit");
         const offsetParam = url.searchParams.get("offset");
+        const projectIdParam = url.searchParams.get("projectId");
 
         const limit = limitParam ? Math.min(parseInt(limitParam, 10), 100) : 50;
         const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
+        const projectId = projectIdParam === "null" ? null : projectIdParam || undefined;
 
         if ((limit !== undefined && Number.isNaN(limit)) || (offset !== undefined && Number.isNaN(offset))) {
           sendJson(res, 400, { error: "Invalid limit or offset parameter." });
           return;
         }
 
-        const chats = await listChats(sessionToken, limit, offset);
+        const chats = await listChats(sessionToken, limit, offset, projectId);
         sendJson<ListChatsResponse>(res, 200, { success: true, chats });
         return;
       }
@@ -502,6 +586,7 @@ export function createVaultHttpServer() {
       if (method === "POST" && pathname === "/chats/messages") {
         const body = await readJsonBody<{
           chatId?: string;
+          projectId?: string | null;
           message?: string;
           provider?: string;
           model?: string;
@@ -523,6 +608,7 @@ export function createVaultHttpServer() {
 
         const result = await sendMessageAndExecute({
           chatId: body.chatId,
+          projectId: body.projectId,
           message: body.message,
           provider: body.provider,
           model: body.model,
@@ -778,7 +864,7 @@ export function createVaultHttpServer() {
         return;
       }
 
-      if (err instanceof ApiKeyNotFoundError || err instanceof ChatNotFoundError) {
+      if (err instanceof ApiKeyNotFoundError || err instanceof ChatNotFoundError || err instanceof ProjectNotFoundError) {
         sendJson(res, 404, { error: err.message });
         return;
       }

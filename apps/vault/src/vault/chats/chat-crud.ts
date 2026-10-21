@@ -23,6 +23,7 @@ import { getAttachmentsForMessages } from "../files/file-service.js";
 
 export interface CreateChatParams {
   id?: string;
+  projectId?: string | null;
   title?: string;
   metadata?: Record<string, any> | null;
 }
@@ -72,6 +73,7 @@ export async function createChat(params: CreateChatParams = {}, sessionToken: st
 
   const record = await createChatRecord({
     id: chatId,
+    project_id: params.projectId ?? null,
     encryption_version: 1,
     status: "ACTIVE",
     encrypted_title: encryptedTitle.ciphertext,
@@ -84,6 +86,7 @@ export async function createChat(params: CreateChatParams = {}, sessionToken: st
 
   return {
     id: record.id,
+    projectId: (record as any).project_id ?? null,
     title: rawTitle,
     status: record.status,
     metadata: params.metadata ?? null,
@@ -92,8 +95,8 @@ export async function createChat(params: CreateChatParams = {}, sessionToken: st
   };
 }
 
-export async function listChats(sessionToken: string, limit?: number, offset?: number): Promise<ChatMetadata[]> {
-  const records = await getAllChatsRecords(limit, offset);
+export async function listChats(sessionToken: string, limit?: number, offset?: number, projectId?: string | null): Promise<ChatMetadata[]> {
+  const records = await getAllChatsRecords(limit, offset, projectId);
 
   return await vaultState.withDbKey(sessionToken, (dbKey) => {
     const chats: ChatMetadata[] = [];
@@ -104,6 +107,7 @@ export async function listChats(sessionToken: string, limit?: number, offset?: n
 
       chats.push({
         id: record.id,
+        projectId: (record as any).project_id ?? null,
         title,
         status: record.status,
         metadata: fields.metadata,
@@ -134,6 +138,7 @@ export async function getChat(id: string, sessionToken: string): Promise<ChatMet
 
     return {
       id: record.id,
+      projectId: (record as any).project_id ?? null,
       title,
       status: record.status,
       metadata: fields.metadata,

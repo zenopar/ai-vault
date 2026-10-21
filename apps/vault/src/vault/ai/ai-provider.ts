@@ -53,10 +53,12 @@ const FALLBACK_SYSTEM_PROMPT = "Be a friendly but 100% honest assistant. Truth i
 
 function mergeSystemPrompt(messages: ChatMessagePrompt[], globalSystemPrompt?: string): ChatMessagePrompt[] {
   const existingSystemMsg = messages.find((m) => m.role === "system")?.content || "";
-  const basePrompt = globalSystemPrompt || FALLBACK_SYSTEM_PROMPT;
-  const finalSystemInstructionText = existingSystemMsg
-    ? `${existingSystemMsg}\n\n${basePrompt}`
-    : basePrompt;
+  const basePrompt = globalSystemPrompt !== undefined ? globalSystemPrompt : FALLBACK_SYSTEM_PROMPT;
+  const finalSystemInstructionText = [existingSystemMsg, basePrompt].filter((s) => s.trim().length > 0).join("\n\n");
+
+  if (!finalSystemInstructionText) {
+    return messages.filter((m) => m.role !== "system");
+  }
 
   return [
     { role: "system", content: finalSystemInstructionText },
@@ -90,7 +92,7 @@ export async function executeAiCompletion(params: AiExecutionParams): Promise<Ai
   const mergedMessages = mergeSystemPrompt(params.messages, params.systemPrompt);
 
   if (provider === "google") {
-    model = model || "gemini-3.7-flash";
+    model = model || "gemini-3.8-flash";
     result = await callGemini(apiKey, model, mergedMessages, params.maxOutputTokens, thinkingLevel);
   } else if (provider === "anthropic") {
     model = model || "claude-sonnet-5";
