@@ -268,8 +268,9 @@ EXECUTE FUNCTION "vault"."set_updated_at"();
 -- Seed default models for common providers
 INSERT INTO "vault"."models" ("provider", "name", "display_name", "description", "context_window", "input_price_per_1m", "output_price_per_1m", "is_active")
 VALUES
-    -- Google Gemini (Gemini 3 Series & Active Versions)
-    ('google', 'gemini-3.7-flash', 'Gemini 3.7 Flash', 'Google latest flagship workhorse model for coding, agents, and complex reasoning', 1048576, 0.75, 3.75, true),
+    -- Google Gemini (Gemini 4 & 3 Series & Active Versions)
+    ('google', 'gemini-4-argon', 'Gemini 4 Argon', 'Google next-generation frontier model for advanced reasoning, coding, and agentic tasks', 1048576, 2.00, 10.00, true),
+    ('google', 'gemini-3.8-flash', 'Gemini 3.8 Flash', 'Google latest flagship workhorse model for coding, agents, and complex reasoning', 1048576, 0.75, 3.75, true),
     ('google', 'gemini-3.6-flash', 'Gemini 3.6 Flash', 'High-efficiency model optimized for agentic planning and tasks', 1048576, 1.50, 7.50, true),
     ('google', 'gemini-3.5-flash', 'Gemini 3.5 Flash', 'Fast and versatile multimodal model for production workloads', 1048576, 1.50, 9.00, true),
     ('google', 'gemini-3.5-flash-lite', 'Gemini 3.5 Flash-Lite', 'Cost-sensitive high-throughput automation model', 1048576, 0.30, 2.50, true),
