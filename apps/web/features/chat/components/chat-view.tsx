@@ -7,13 +7,18 @@ import {
   ChatAttachmentDto,
   AiApiKeyMetadata,
   AiModelMetadata,
+  ProjectDto,
 } from "@ai-vault/types";
 import {
   sendMessageAction,
   getChatMessagesAction,
   deleteChatAction,
+  createProjectAction,
+  updateProjectAction,
+  deleteProjectAction,
 } from "../actions/chat.actions";
 import { ChatSidebar } from "./chat-sidebar";
+import { ProjectModal } from "./project-modal";
 import { ChatMessageItem } from "./chat-message-item";
 import { ThinkingAura } from "./thinking-aura";
 import { ChatInputDeck, type ChatInputDeckHandle } from "./chat-input-deck";
@@ -22,9 +27,11 @@ import { AutoLockGuard } from "@/features/vault/components/auto-lock-guard";
 
 interface ChatViewProps {
   initialChats: ChatMetadata[];
+  initialProjects?: ProjectDto[];
   initialKeys: AiApiKeyMetadata[];
   initialModels: AiModelMetadata[];
   initialChatId?: string | null;
+  initialProjectId?: string | null;
   initialMessages?: ChatMessageDto[];
   initialHasMore?: boolean;
   initialTotal?: number;
@@ -32,19 +39,26 @@ interface ChatViewProps {
 
 export function ChatView({
   initialChats,
+  initialProjects = [],
   initialKeys,
   initialModels,
   initialChatId = null,
+  initialProjectId = null,
   initialMessages = [],
   initialHasMore = false,
 }: ChatViewProps) {
   const [chats, setChats] = useState<ChatMetadata[]>(initialChats);
+  const [projects, setProjects] = useState<ProjectDto[]>(initialProjects);
   const [activeChatId, setActiveChatId] = useState<string | null>(initialChatId);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(initialProjectId);
   const [messages, setMessages] = useState<ChatMessageDto[]>(initialMessages);
   const [hasMore, setHasMore] = useState<boolean>(initialHasMore);
   const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
   const [keys] = useState<AiApiKeyMetadata[]>(initialKeys);
   const [models] = useState<AiModelMetadata[]>(initialModels);
+
+  const [projectModalOpen, setProjectModalOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<ProjectDto | null>(null);
 
   const defaultKey = keys[0];
   const [selectedKeyId, setSelectedKeyId] = useState<string>(defaultKey?.id || "");
@@ -56,7 +70,7 @@ export function ChatView({
       );
       if (match) return match.name;
     }
-    return models[0]?.name || "gemini-3.7-flash";
+    return models[0]?.name || "gemini-3.8-flash";
   };
 
   const [selectedModel, setSelectedModel] = useState<string>(getInitialModel());
@@ -69,6 +83,8 @@ export function ChatView({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const inputDeckRef = useRef<ChatInputDeckHandle>(null);
   const shouldAutoScrollToBottomRef = useRef<boolean>(true);
+
+  const activeProject = projects.find((p) => p.id === activeProjectId) || null;
 
   const handleAttachFile = (file: ChatAttachmentDto) => {
     inputDeckRef.current?.attachFile(file);
@@ -110,7 +126,6 @@ export function ChatView({
         setMessages((prev) => [...olderMessages, ...prev]);
         setHasMore(Boolean(res.data.hasMore));
 
-        // Preserve viewport position after prepending older messages
         requestAnimationFrame(() => {
           if (container) {
             const newScrollHeight = container.scrollHeight;
@@ -129,6 +144,10 @@ export function ChatView({
     if (chatId === activeChatId) return;
     setError(null);
     setActiveChatId(chatId);
+    const selectedChatMeta = chats.find((c) => c.id === chatId);
+    if (selectedChatMeta) {
+      setActiveProjectId(selectedChatMeta.projectId ?? null);
+    }
     shouldAutoScrollToBottomRef.current = true;
     if (typeof window !== "undefined") {
       window.history.replaceState(null, "", `/app?c=${chatId}`);
@@ -141,6 +160,7 @@ export function ChatView({
         setMessages(reversed);
         setHasMore(Boolean(res.data.hasMore));
         if (res.data.chat) {
+          setActiveProjectId(res.data.chat.projectId ?? null);
           setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, ...res.data?.chat } : c)));
         }
       } else {
@@ -152,16 +172,84 @@ export function ChatView({
     if (window.innerWidth < 768) setSidebarOpen(false);
   };
 
-  const handleNewChat = () => {
+  const handleNewChat = (projectId?: string | null) => {
+    const nextProjectId = projectId !== undefined ? projectId : activeProjectId;
     setActiveChatId(null);
+    setActiveProjectId(nextProjectId);
     setMessages([]);
     setHasMore(false);
     setError(null);
     shouldAutoScrollToBottomRef.current = true;
     if (typeof window !== "undefined") {
-      window.history.replaceState(null, "", "/app");
+      window.history.replaceState(null, "", nextProjectId ? `/app?p=${nextProjectId}` : "/app");
     }
     if (window.innerWidth < 768) setSidebarOpen(false);
+  };
+
+  const handleSelectProject = (projectId: string | null) => {
+    setActiveProjectId(projectId);
+    setActiveChatId(null);
+    setMessages([]);
+    setHasMore(false);
+    setError(null);
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", projectId ? `/app?p=${projectId}` : "/app");
+    }
+  };
+
+  const handleOpenCreateProject = () => {
+    setEditingProject(null);
+    setProjectModalOpen(true);
+  };
+
+  const handleOpenEditProject = (project: ProjectDto) => {
+    setEditingProject(project);
+    setProjectModalOpen(true);
+  };
+
+  const handleSaveProject = async (data: { id?: string; name: string; systemPrompt: string }) => {
+    setError(null);
+    if (data.id) {
+      const res = await updateProjectAction({
+        id: data.id,
+        name: data.name,
+        systemPrompt: data.systemPrompt,
+      });
+      if (res.success && res.data) {
+        setProjects((prev) => prev.map((p) => (p.id === data.id ? res.data! : p)));
+      } else {
+        setError(res.error || "Failed to update project.");
+      }
+    } else {
+      const res = await createProjectAction({
+        name: data.name,
+        systemPrompt: data.systemPrompt,
+      });
+      if (res.success && res.data) {
+        setProjects((prev) => [...prev, res.data!]);
+        handleNewChat(res.data.id);
+      } else {
+        setError(res.error || "Failed to create project.");
+      }
+    }
+  };
+
+  const handleDeleteProject = async (projectId: string) => {
+    setIsPending(true);
+    try {
+      const res = await deleteProjectAction(projectId);
+      if (res.success) {
+        setProjects((prev) => prev.filter((p) => p.id !== projectId));
+        setChats((prev) => prev.filter((c) => c.projectId !== projectId));
+        if (activeProjectId === projectId) {
+          handleNewChat(null);
+        }
+      } else {
+        setError(res.error || "Failed to delete project.");
+      }
+    } finally {
+      setIsPending(false);
+    }
   };
 
   const handleDeleteChat = async (chatId: string) => {
@@ -171,7 +259,7 @@ export function ChatView({
       if (res.success) {
         setChats((prev) => prev.filter((c) => c.id !== chatId));
         if (activeChatId === chatId) {
-          handleNewChat();
+          handleNewChat(activeProjectId);
         }
       } else {
         setError(res.error || "Failed to delete chat.");
@@ -204,6 +292,7 @@ export function ChatView({
 
     const formData = new FormData();
     if (activeChatId) formData.append("chatId", activeChatId);
+    if (!activeChatId && activeProjectId) formData.append("projectId", activeProjectId);
     formData.append("message", trimmed);
     formData.append("provider", provider);
     formData.append("model", selectedModel);
@@ -231,6 +320,7 @@ export function ChatView({
       });
 
       setActiveChatId(chat.id);
+      setActiveProjectId(chat.projectId ?? null);
       if (typeof window !== "undefined") {
         window.history.replaceState(null, "", `/app?c=${chat.id}`);
       }
@@ -248,6 +338,13 @@ export function ChatView({
   return (
     <AutoLockGuard>
       <div className="flex h-screen w-full bg-[#0e0f12] bg-[radial-gradient(ellipse_80%_60%_at_50%_-15%,rgba(120,119,198,0.08),transparent)] text-neutral-100 overflow-hidden relative">
+        <ProjectModal
+          isOpen={projectModalOpen}
+          project={editingProject}
+          onClose={() => setProjectModalOpen(false)}
+          onSave={handleSaveProject}
+        />
+
         {/* Mobile sidebar toggle button */}
         {!sidebarOpen && (
           <Button
@@ -267,10 +364,16 @@ export function ChatView({
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
           chats={chats}
+          projects={projects}
           activeChatId={activeChatId}
+          activeProjectId={activeProjectId}
           onSelectChat={handleSelectChat}
           onNewChat={handleNewChat}
           onDeleteChat={handleDeleteChat}
+          onSelectProject={handleSelectProject}
+          onCreateProject={handleOpenCreateProject}
+          onEditProject={handleOpenEditProject}
+          onDeleteProject={handleDeleteProject}
           keys={keys}
           telemetry={{
             totalInputTokens,
@@ -280,8 +383,7 @@ export function ChatView({
           }}
         />
 
-        <main className="flex-1 flex flex-col h-full overflow-hidden transition-[padding] duration-200 md:pl-56">
-
+        <main className="flex-1 flex flex-col h-full overflow-hidden transition-[padding] duration-200 md:pl-60">
           {/* Messages */}
           <div
             ref={scrollContainerRef}
@@ -342,7 +444,7 @@ export function ChatView({
 
           <ChatInputDeck
             ref={inputDeckRef}
-            key={activeChatId || "new-chat"}
+            key={activeChatId || activeProjectId || "new-chat"}
             onSubmit={handleSendMessage}
             disabled={isPending}
             keys={keys}
@@ -354,6 +456,9 @@ export function ChatView({
             thinkingLevel={thinkingLevel}
             setThinkingLevel={setThinkingLevel}
             activeChatId={activeChatId}
+            activeProject={activeProject}
+            onEditProject={handleOpenEditProject}
+            onClearProject={() => handleNewChat(null)}
           />
         </main>
       </div>

@@ -1,16 +1,16 @@
 import { redirect } from "next/navigation";
 import { verifySession } from "@/shared/lib/session";
 import { getVaultStatus } from "@/features/vault/services/vault-status.service";
-import { listChatsService, getChatMessagesService } from "@/features/chat/services/chat.service";
+import { listChatsService, getChatMessagesService, listProjectsService } from "@/features/chat/services/chat.service";
 import { listApiKeysService } from "@/features/keys/services/keys.service";
 import { listModelsService } from "@/features/chat/services/models.service";
 import { ChatView } from "@/features/chat/components/chat-view";
-import { ChatMetadata, ChatMessageDto, AiApiKeyMetadata, AiModelMetadata } from "@ai-vault/types";
+import { ChatMetadata, ChatMessageDto, AiApiKeyMetadata, AiModelMetadata, ProjectDto } from "@ai-vault/types";
 
 export const dynamic = "force-dynamic";
 
 interface AppPageProps {
-  searchParams: Promise<{ c?: string }>;
+  searchParams: Promise<{ c?: string; p?: string }>;
 }
 
 export default async function AppPage({ searchParams }: AppPageProps) {
@@ -26,8 +26,10 @@ export default async function AppPage({ searchParams }: AppPageProps) {
 
   const resolvedSearchParams = await searchParams;
   const targetChatId = resolvedSearchParams?.c || null;
+  let targetProjectId = resolvedSearchParams?.p || null;
 
   let chats: ChatMetadata[] = [];
+  let projects: ProjectDto[] = [];
   let keys: AiApiKeyMetadata[] = [];
   let models: AiModelMetadata[] = [];
   let initialMessages: ChatMessageDto[] = [];
@@ -35,14 +37,18 @@ export default async function AppPage({ searchParams }: AppPageProps) {
   let initialTotal = 0;
 
   try {
-    const [chatsRes, keysRes, modelsRes] = await Promise.allSettled([
-      listChatsService(),
+    const [chatsRes, projectsRes, keysRes, modelsRes] = await Promise.allSettled([
+      listChatsService(100),
+      listProjectsService(),
       listApiKeysService(),
       listModelsService(),
     ]);
 
     if (chatsRes.status === "fulfilled") {
       chats = chatsRes.value;
+    }
+    if (projectsRes.status === "fulfilled") {
+      projects = projectsRes.value;
     }
     if (keysRes.status === "fulfilled") {
       keys = keysRes.value;
@@ -57,6 +63,9 @@ export default async function AppPage({ searchParams }: AppPageProps) {
       initialMessages = (messagesRes.messages || []).slice().reverse();
       initialHasMore = messagesRes.hasMore;
       initialTotal = messagesRes.total;
+      if (messagesRes.chat?.projectId !== undefined) {
+        targetProjectId = messagesRes.chat.projectId ?? null;
+      }
     }
   } catch (err) {
     console.error("[AppPage] Error fetching initial data:", err);
@@ -64,11 +73,13 @@ export default async function AppPage({ searchParams }: AppPageProps) {
 
   return (
     <ChatView
-      key={targetChatId || "new-chat"}
+      key={targetChatId || targetProjectId || "new-chat"}
       initialChats={chats}
+      initialProjects={projects}
       initialKeys={keys}
       initialModels={models}
       initialChatId={targetChatId}
+      initialProjectId={targetProjectId}
       initialMessages={initialMessages}
       initialHasMore={initialHasMore}
       initialTotal={initialTotal}

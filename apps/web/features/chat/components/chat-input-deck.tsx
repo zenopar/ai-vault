@@ -12,7 +12,7 @@ import {
 } from "react";
 import Link from "next/link";
 import { Paperclip, FolderOpen, FileText, Film, Check, Loader2, X } from "lucide-react";
-import { AiApiKeyMetadata, AiModelMetadata, ChatAttachmentDto } from "@ai-vault/types";
+import { AiApiKeyMetadata, AiModelMetadata, ChatAttachmentDto, ProjectDto } from "@ai-vault/types";
 import { Button, DropdownSelect } from "@/shared/components";
 import { AttachmentPreviewDeck, PendingAttachment } from "./attachment-preview-deck";
 
@@ -33,6 +33,9 @@ interface ChatInputDeckProps {
   thinkingLevel: "none" | "low" | "medium" | "high";
   setThinkingLevel: (level: "none" | "low" | "medium" | "high") => void;
   activeChatId?: string | null;
+  activeProject?: ProjectDto | null;
+  onEditProject?: (project: ProjectDto) => void;
+  onClearProject?: () => void;
 }
 
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
@@ -58,6 +61,9 @@ export const ChatInputDeck = forwardRef<ChatInputDeckHandle, ChatInputDeckProps>
     thinkingLevel,
     setThinkingLevel,
     activeChatId,
+    activeProject,
+    onEditProject,
+    onClearProject,
   }: ChatInputDeckProps,
   ref
 ) {
@@ -364,7 +370,7 @@ export const ChatInputDeck = forwardRef<ChatInputDeckHandle, ChatInputDeckProps>
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             disabled={disabled}
-            placeholder="Send a message or paste images..."
+            placeholder={activeProject ? `Message in ${activeProject.name}...` : "Send a message or paste images..."}
             rows={1}
             autoComplete="off"
             className="chat-textarea w-full bg-transparent text-[14.5px] sm:text-[15px] text-neutral-100 placeholder:text-neutral-500/70 resize-none focus:outline-none leading-[1.6] py-2.5 px-3.5 sm:py-3 sm:px-4.5 font-sans antialiased max-h-[200px] overflow-y-auto block caret-indigo-400 selection:bg-indigo-500/25 selection:text-white"
@@ -378,6 +384,31 @@ export const ChatInputDeck = forwardRef<ChatInputDeckHandle, ChatInputDeckProps>
           <div className="px-3 sm:px-4 pb-2.5 sm:pb-3 pt-1.5 flex items-center justify-between gap-2 font-mono text-[11px] text-neutral-400 border-t border-white/[0.03]">
             {/* Left side: Attach Button & Selectors */}
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
+              {/* Active Project Pill */}
+              {activeProject && (
+                <div className="flex items-center gap-1 h-7 pl-2 pr-1 rounded-lg bg-indigo-500/15 border border-indigo-500/25 text-indigo-300 text-[11px] font-mono shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => onEditProject?.(activeProject)}
+                    className="flex items-center gap-1.5 hover:text-indigo-100 transition-colors cursor-pointer"
+                    title="Project settings"
+                  >
+                    <FolderOpen className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                    <span className="max-w-[110px] truncate font-medium">{activeProject.name}</span>
+                  </button>
+                  {onClearProject && (
+                    <button
+                      type="button"
+                      onClick={onClearProject}
+                      className="p-0.5 text-indigo-400/70 hover:text-indigo-200 rounded hover:bg-indigo-500/20 transition-colors cursor-pointer"
+                      title="Switch to global chat"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* Attach File Button */}
               <Button
                 type="button"
