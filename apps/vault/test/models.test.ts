@@ -57,7 +57,9 @@ describe("AI Models API (Unit Tests / In-Memory Mock DB)", () => {
 
     // Verify some known models exist
     const names = res.body.models.map((m: any) => m.name);
-    expect(names).toContain("gemini-3.7-flash");
+    expect(names).toContain("gemini-4-argon");
+    expect(names).toContain("gemini-3.8-flash");
+    expect(names).not.toContain("gemini-3.7-flash");
     expect(names).toContain("gpt-5.6-sol");
     expect(names).toContain("claude-sonnet-5");
     expect(names).toContain("deepseek-v4-pro");
@@ -77,7 +79,8 @@ describe("AI Models API (Unit Tests / In-Memory Mock DB)", () => {
     expect(res.body.success).toBe(true);
     expect(res.body.models.length).toBeGreaterThan(0);
     expect(res.body.models.every((m: any) => m.provider === "google")).toBe(true);
-    expect(res.body.models.some((m: any) => m.name === "gemini-3.7-flash")).toBe(true);
+    expect(res.body.models.some((m: any) => m.name === "gemini-3.8-flash")).toBe(true);
+    expect(res.body.models.some((m: any) => m.name === "gemini-4-argon")).toBe(true);
     expect(res.body.models.some((m: any) => m.name === "gpt-5.6-sol")).toBe(false);
   });
 

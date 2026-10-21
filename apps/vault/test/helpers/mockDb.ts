@@ -4,10 +4,19 @@ import * as clientModule from "../../src/db/client.js";
 const TEST_MOCK_MODELS = [
   // Google Gemini
   {
+    id: "00000000-0000-4000-8000-000000000000",
+    provider: "google",
+    name: "gemini-4-argon",
+    display_name: "Gemini 4 Argon",
+    description: "Google next-generation frontier model for advanced reasoning, coding, and agentic tasks",
+    context_window: 1048576,
+    is_active: true,
+  },
+  {
     id: "00000000-0000-4000-8000-000000000001",
     provider: "google",
-    name: "gemini-3.7-flash",
-    display_name: "Gemini 3.7 Flash",
+    name: "gemini-3.8-flash",
+    display_name: "Gemini 3.8 Flash",
     description: "Google latest flagship workhorse model for coding and agents",
     context_window: 1048576,
     is_active: true,
@@ -86,6 +95,7 @@ export function createInMemoryPrismaMock() {
   let vaultConfigRecord: any = null;
   let settingsRecord: any = null;
   const apiKeysMap = new Map<string, any>();
+  const projectsMap = new Map<string, any>();
   const chatsMap = new Map<string, any>();
   const messagesMap = new Map<string, any>();
   const modelsMap = new Map<string, any>();
@@ -195,9 +205,69 @@ export function createInMemoryPrismaMock() {
         return { count: 1 };
       }),
     },
+    projects: {
+      findMany: vi.fn(async (args?: any) => {
+        let list = Array.from(projectsMap.values());
+        if (args?.where?.status) {
+          list = list.filter((p) => p.status === args.where.status);
+        }
+        return list.sort((a, b) => a.created_at.getTime() - b.created_at.getTime());
+      }),
+      findUnique: vi.fn(async ({ where }: any) => {
+        const item = projectsMap.get(where.id);
+        return item ? { ...item } : null;
+      }),
+      create: vi.fn(async ({ data }: any) => {
+        const record = {
+          encryption_version: 1,
+          status: "ACTIVE",
+          ...data,
+          created_at: data.created_at ?? new Date(),
+          updated_at: data.updated_at ?? new Date(),
+        };
+        projectsMap.set(record.id, record);
+        return { ...record };
+      }),
+      update: vi.fn(async ({ where, data }: any) => {
+        const item = projectsMap.get(where.id);
+        if (!item) {
+          throw new Error(`Record to update does not exist: ${where.id}`);
+        }
+        const updated = {
+          ...item,
+          ...data,
+          updated_at: new Date(),
+        };
+        projectsMap.set(where.id, updated);
+        return { ...updated };
+      }),
+      delete: vi.fn(async ({ where }: any) => {
+        const item = projectsMap.get(where.id);
+        if (!item) {
+          throw new Error(`Record to delete does not exist: ${where.id}`);
+        }
+        projectsMap.delete(where.id);
+        for (const [chatId, chat] of chatsMap.entries()) {
+          if (chat.project_id === where.id) {
+            chatsMap.delete(chatId);
+          }
+        }
+        return { ...item };
+      }),
+      deleteMany: vi.fn(async () => {
+        projectsMap.clear();
+        return { count: 1 };
+      }),
+    },
     chats: {
-      findMany: vi.fn(async () => {
-        const list = Array.from(chatsMap.values());
+      findMany: vi.fn(async (args?: any) => {
+        let list = Array.from(chatsMap.values());
+        if (args?.where?.status) {
+          list = list.filter((c) => c.status === args.where.status);
+        }
+        if (args?.where && "project_id" in args.where) {
+          list = list.filter((c) => (c.project_id ?? null) === args.where.project_id);
+        }
         return list.sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
       }),
       findUnique: vi.fn(async ({ where }: any) => {
@@ -419,6 +489,7 @@ export function createInMemoryPrismaMock() {
       vaultConfigRecord = null;
       settingsRecord = null;
       apiKeysMap.clear();
+      projectsMap.clear();
       chatsMap.clear();
       messagesMap.clear();
       chatFilesMap.clear();

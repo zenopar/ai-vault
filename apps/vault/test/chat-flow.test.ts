@@ -229,7 +229,7 @@ describe("End-to-End Chat & Messaging API (Unit Tests / Mock AI)", () => {
       .send({
         message: "Explain quantum computing with high thinking",
         provider: "google",
-        model: "gemini-3.7-flash",
+        model: "gemini-3.8-flash",
         thinkingLevel: "high",
       });
 
@@ -249,7 +249,7 @@ describe("End-to-End Chat & Messaging API (Unit Tests / Mock AI)", () => {
         chatId: res.body.chat.id,
         message: "Quick question without thinking",
         provider: "google",
-        model: "gemini-3.7-flash",
+        model: "gemini-3.8-flash",
         thinkingLevel: "none",
       });
 
