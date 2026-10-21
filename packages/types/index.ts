@@ -30,6 +30,8 @@ export interface AiModelMetadata {
   displayName: string;
   description?: string | null;
   contextWindow?: number | null;
+  inputPricePer1m?: number | null;
+  outputPricePer1m?: number | null;
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -46,11 +48,44 @@ export interface AddModelRequest {
   name: string;
   displayName: string;
   description?: string;
+  inputPricePer1m?: number | null;
+  outputPricePer1m?: number | null;
 }
 
 export interface AddModelResponse {
   success: boolean;
   model?: AiModelMetadata;
+  error?: string;
+}
+
+export interface ProjectDto {
+  id: string;
+  name: string;
+  systemPrompt: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ListProjectsResponse {
+  success: boolean;
+  projects?: ProjectDto[];
+  error?: string;
+}
+
+export interface CreateProjectRequest {
+  name: string;
+  systemPrompt?: string;
+}
+
+export interface UpdateProjectRequest {
+  name?: string;
+  systemPrompt?: string;
+}
+
+export interface ProjectResponse {
+  success: boolean;
+  project?: ProjectDto;
   error?: string;
 }
 
@@ -86,6 +121,7 @@ export interface ListApiKeysResponse {
 
 export interface ChatMetadata {
   id: string;
+  projectId?: string | null;
   title: string;
   status: string;
   metadata?: Record<string, any> | null;
@@ -140,6 +176,7 @@ export interface ChatMessageDto {
 
 export interface SendChatMessageRequest {
   chatId?: string;
+  projectId?: string | null;
   message: string;
   provider?: string;
   model?: string;
