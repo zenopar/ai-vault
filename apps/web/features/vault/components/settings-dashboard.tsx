@@ -15,6 +15,7 @@ export function SettingsDashboard({ initialSettings, apiKeys }: SettingsDashboar
   const [settings, setSettings] = useState<SettingsDto>(initialSettings);
   const [systemPrompt, setSystemPrompt] = useState(initialSettings.systemPrompt);
   const [maxCostPerRequest, setMaxCostPerRequest] = useState(initialSettings.maxCostPerRequest.toString());
+  const [budgetControlEnabled, setBudgetControlEnabled] = useState(initialSettings.budgetControlEnabled ?? true);
   const [tokenTiers, setTokenTiers] = useState<TokenTierDto[]>(initialSettings.tokenTiers);
   const [titlePrompt, setTitlePrompt] = useState(initialSettings.titlePrompt || "");
   const [titleApiKeyId, setTitleApiKeyId] = useState(initialSettings.titleApiKeyId || "");
@@ -39,6 +40,7 @@ export function SettingsDashboard({ initialSettings, apiKeys }: SettingsDashboar
       const res = await updateSettingsAction({
         systemPrompt,
         maxCostPerRequest: costNum,
+        budgetControlEnabled,
         tokenTiers,
         titlePrompt,
         titleApiKeyId: titleApiKeyId || null,
@@ -120,25 +122,44 @@ export function SettingsDashboard({ initialSettings, apiKeys }: SettingsDashboar
           </Card>
 
           <Card className="p-6 sm:p-8 space-y-6">
-            <div className="space-y-1">
-              <h2 className="text-base font-medium text-neutral-100 font-sans">Cost Controls</h2>
-              <p className="text-xs text-neutral-500 font-mono">
-                Set budget limitations for AI usage
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+              <div className="space-y-1">
+                <h2 className="text-base font-medium text-neutral-100 font-sans">Cost & Budget Controls</h2>
+                <p className="text-xs text-neutral-500 font-mono">
+                  Set budget limitations and token output restrictions
+                </p>
+              </div>
+              <label className="inline-flex items-center gap-2 cursor-pointer select-none bg-[#181920] border border-white/[0.08] px-3 py-1.5 rounded-xl hover:border-white/20 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={budgetControlEnabled}
+                  onChange={(e) => setBudgetControlEnabled(e.target.checked)}
+                  className="w-4 h-4 rounded bg-[#101115] border-white/20 text-indigo-500 focus:ring-0 cursor-pointer"
+                />
+                <span className="text-xs font-mono font-medium text-neutral-200">
+                  {budgetControlEnabled ? "Budget control: ON" : "Budget control: OFF (Unlimited)"}
+                </span>
+              </label>
             </div>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Input
-                label="Max Cost Per Request (USD $)"
-                type="number"
-                step="0.01"
-                min="0"
-                value={maxCostPerRequest}
-                onChange={(e) => setMaxCostPerRequest(e.target.value)}
-                placeholder="e.g. 0.50"
-                required
-              />
-            </div>
+            {budgetControlEnabled ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input
+                  label="Max Cost Per Request (USD $)"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={maxCostPerRequest}
+                  onChange={(e) => setMaxCostPerRequest(e.target.value)}
+                  placeholder="e.g. 0.50"
+                  required
+                />
+              </div>
+            ) : (
+              <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs font-mono leading-relaxed">
+                ⚠️ <strong>Budget control & restrictions are disabled:</strong> AI requests are completely unconstrained without max cost per request caps or token tier limits, utilizing the model full context window.
+              </div>
+            )}
           </Card>
 
           <Card className="p-6 sm:p-8 space-y-6">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, memo } from "react";
+import { useState, memo } from "react";
 import { ChatMessageDto, ChatAttachmentDto } from "@ai-vault/types";
 import { MarkdownRenderer } from "./markdown-renderer";
 import { MediaLightbox } from "./media-lightbox";
@@ -10,9 +10,7 @@ import { FileText, Film, Download, Paperclip } from "lucide-react";
 interface ChatMessageItemProps {
   message: ChatMessageDto;
   onAttachFile?: (att: ChatAttachmentDto) => void;
-  isLive?: boolean;
-  onLiveUpdate?: () => void;
-  onLiveComplete?: (id: string) => void;
+  isStreaming?: boolean;
 }
 
 function formatBytes(bytes: number): string {
@@ -23,67 +21,12 @@ function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
-interface LiveMarkdownRendererProps {
-  content: string;
-  onUpdate?: () => void;
-  onComplete?: () => void;
-}
 
-function LiveMarkdownRenderer({ content, onUpdate, onComplete }: LiveMarkdownRendererProps) {
-  const [displayedLength, setDisplayedLength] = useState(() => Math.min(content.length, 4));
-  const [isFinished, setIsFinished] = useState(false);
-
-  useEffect(() => {
-    if (!content || displayedLength >= content.length) {
-      setIsFinished(true);
-      onComplete?.();
-      return;
-    }
-
-    const total = content.length;
-    // Chunk size: reveal 2-8 chars per step so it finishes in 1-2.5s smoothly
-    const chunkSize = Math.max(2, Math.floor(total / 60));
-
-    const interval = setInterval(() => {
-      setDisplayedLength((prev) => {
-        const next = Math.min(prev + chunkSize, total);
-        if (next >= total) {
-          clearInterval(interval);
-          setIsFinished(true);
-          onComplete?.();
-        }
-        return next;
-      });
-      onUpdate?.();
-    }, 18);
-
-    return () => clearInterval(interval);
-  }, [content, onComplete, onUpdate]);
-
-  const handleSkip = () => {
-    setDisplayedLength(content.length);
-    setIsFinished(true);
-    onComplete?.();
-  };
-
-  const currentSlice = isFinished ? content : content.slice(0, displayedLength);
-
-  return (
-    <div onClick={handleSkip} title={!isFinished ? "Click to show all" : undefined} className="relative">
-      <MarkdownRenderer content={currentSlice} />
-      {!isFinished && (
-        <span className="inline-block w-2 h-4 ml-1 bg-indigo-400 animate-pulse rounded-[1px] align-middle shadow-[0_0_8px_rgba(129,140,248,0.6)]" />
-      )}
-    </div>
-  );
-}
 
 export const ChatMessageItem = memo(function ChatMessageItem({
   message,
   onAttachFile,
-  isLive = false,
-  onLiveUpdate,
-  onLiveComplete,
+  isStreaming = false,
 }: ChatMessageItemProps) {
   const [copied, setCopied] = useState(false);
   const [activeLightboxAttachment, setActiveLightboxAttachment] = useState<ChatAttachmentDto | null>(null);
@@ -129,20 +72,15 @@ export const ChatMessageItem = memo(function ChatMessageItem({
 
   return (
     <>
-      <div className={`w-full flex my-6 animate-enter ${isAssistant ? "justify-start" : "justify-end"}`}>
+      <div className={`w-full flex my-6 ${isAssistant ? "justify-start" : "justify-end"}`}>
         <div className={`${isAssistant ? "w-full text-neutral-200" : "max-w-[85%] sm:max-w-[80%] text-neutral-100"}`}>
           {/* Content */}
           <div className={`${isAssistant ? "w-full" : "text-right"}`}>
             {isAssistant ? (
               <div className="prose-dark font-sans leading-relaxed">
-                {isLive ? (
-                  <LiveMarkdownRenderer
-                    content={message.content}
-                    onUpdate={onLiveUpdate}
-                    onComplete={() => onLiveComplete?.(message.id)}
-                  />
-                ) : (
-                  <MarkdownRenderer content={message.content} />
+                <MarkdownRenderer content={message.content} />
+                {isStreaming && (
+                  <span className="inline-block w-1.5 h-4 ml-1 bg-neutral-300 animate-pulse rounded-[1px] align-middle" />
                 )}
               </div>
             ) : (

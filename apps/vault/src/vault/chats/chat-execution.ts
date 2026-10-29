@@ -29,6 +29,7 @@ export interface SendMessageParams {
   thinkingLevel?: "low" | "medium" | "high" | "none";
   sessionToken: string;
   fileIds?: string[];
+  onChunk?: (chunk: string) => void;
 }
 
 export interface SendMessageResult {
@@ -41,9 +42,9 @@ const activeChatLocks = new Set<string>();
 
 // === AI EXECUTION PIPELINE ===
 
-async function calculateDynamicTokens(provider: string, model: string, tokenTiers: { max_cost: number; tokens: number }[]): Promise<{ maxTokens: number; maxOutputTokens?: number; inputPrice?: number; outputPrice?: number; modelId?: string }> {
-  let maxTokens = 6000;
-  let maxOutputTokens: number | undefined = undefined;
+async function calculateDynamicTokens(provider: string, model: string, tokenTiers: { max_cost: number; tokens: number }[], budgetControlEnabled: boolean = true): Promise<{ maxTokens: number; maxOutputTokens?: number; inputPrice?: number; outputPrice?: number; modelId?: string }> {
+  let maxTokens = budgetControlEnabled ? 6000 : 128000;
+  let maxOutputTokens: number | undefined = budgetControlEnabled ? undefined : 65536;
   let inputPrice: number | undefined = undefined;
   let outputPrice: number | undefined = undefined;
 
@@ -60,27 +61,30 @@ async function calculateDynamicTokens(provider: string, model: string, tokenTier
       const outputCost = dbModel.output_price_per_1m ? Number(dbModel.output_price_per_1m) : null;
       const contextLimit = dbModel.context_window ? Math.max(dbModel.context_window - 2000, 2000) : 100000;
 
-      if (inputCost !== null) {
-        if (inputCost <= 0.20) maxTokens = 32000;
-        else if (inputCost <= 0.50) maxTokens = 16000;
-        else if (inputCost <= 1.50) maxTokens = 8000;
-        else if (inputCost <= 4.00) maxTokens = 4000;
-        else maxTokens = 2500;
-      }
-
-      if (outputCost !== null) {
-        if (tokenTiers && tokenTiers.length > 0) {
-          const sortedTiers = [...tokenTiers].sort((a, b) => a.max_cost - b.max_cost);
-          for (const tier of sortedTiers) {
-             if (outputCost <= tier.max_cost) {
-               maxOutputTokens = tier.tokens;
-               break;
-             }
+      if (!budgetControlEnabled) {
+        maxTokens = contextLimit;
+        maxOutputTokens = 65536;
+      } else {
+        if (inputCost !== null) {
+          if (inputCost <= 0.20) maxTokens = 32000;
+          else if (inputCost <= 0.50) maxTokens = 16000;
+          else if (inputCost <= 1.50) maxTokens = 8000;
+          else if (inputCost <= 4.00) maxTokens = 4000;
+          else maxTokens = 2500;
+        }
+        if (outputCost !== null) {
+          if (tokenTiers && tokenTiers.length > 0) {
+            const sortedTiers = [...tokenTiers].sort((a, b) => a.max_cost - b.max_cost);
+            for (const tier of sortedTiers) {
+              if (outputCost <= tier.max_cost) {
+                maxOutputTokens = tier.tokens;
+                break;
+              }
+            }
           }
         }
+        maxTokens = Math.min(maxTokens, contextLimit);
       }
-
-      maxTokens = Math.min(maxTokens, contextLimit);
       inputPrice = inputCost !== null ? inputCost : undefined;
       outputPrice = outputCost !== null ? outputCost : undefined;
       return { maxTokens, maxOutputTokens, inputPrice, outputPrice, modelId: dbModel.id };
@@ -188,7 +192,8 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
     const { maxTokens, maxOutputTokens, inputPrice, outputPrice, modelId } = await calculateDynamicTokens(
       activeProvider,
       activeModel,
-      settings.tokenTiers
+      settings.tokenTiers,
+      settings.budgetControlEnabled !== false
     );
 
     // 0. Load any file attachments (and extract images/docs for multimodal AI)
@@ -255,7 +260,7 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
     // 1.5 Enforce Max Cost
     let finalMaxOutputTokens = maxOutputTokens;
 
-    if (inputPrice !== undefined && outputPrice !== undefined && settings.maxCostPerRequest !== undefined) {
+    if (settings.budgetControlEnabled !== false && inputPrice !== undefined && outputPrice !== undefined && settings.maxCostPerRequest !== undefined) {
       const estimatedInputTokens = promptContext.reduce((acc, msg) => acc + Math.ceil(msg.content.length / 4), 0);
       const estInCost = (estimatedInputTokens / 1000000) * inputPrice;
 
@@ -280,7 +285,7 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
     }
 
     if (!finalMaxOutputTokens) {
-      finalMaxOutputTokens = 8192;
+      finalMaxOutputTokens = settings.budgetControlEnabled === false ? 65536 : 8192;
     }
 
     // 2. Execute AI generation first - if this fails, no DB changes occur
@@ -292,6 +297,7 @@ export async function sendMessageAndExecute(params: SendMessageParams): Promise<
       maxOutputTokens: finalMaxOutputTokens,
       sessionToken: params.sessionToken,
       systemPrompt: effectiveSystemPrompt,
+      onChunk: params.onChunk,
     });
 
     // 3. AI execution succeeded! Prepare chat metadata

@@ -315,6 +315,7 @@ export interface SettingsDto {
   systemPrompt: string;
   tokenTiers: TokenTierDto[];
   maxCostPerRequest: number;
+  budgetControlEnabled?: boolean;
   titlePrompt?: string;
   titleApiKeyId?: string | null;
   titleModelId?: string | null;
@@ -330,6 +331,7 @@ export interface UpdateSettingsRequest {
   systemPrompt?: string;
   tokenTiers?: TokenTierDto[];
   maxCostPerRequest?: number;
+  budgetControlEnabled?: boolean;
   titlePrompt?: string;
   titleApiKeyId?: string | null;
   titleModelId?: string | null;

@@ -97,6 +97,80 @@ export class VaultApiClient {
     });
   }
 
+  /**
+   * Streaming request handler returning a Web ReadableStream.
+   */
+  static streamRequest(
+    method: string,
+    path: string,
+    body?: unknown,
+    options?: VaultRequestOptions
+  ): Promise<ReadableStream<Uint8Array>> {
+    return new Promise((resolve, reject) => {
+      const isUnixSocket = this.vaultUrl.startsWith("unix://");
+
+      let reqOptions: http.RequestOptions;
+      if (isUnixSocket) {
+        reqOptions = {
+          socketPath: this.vaultUrl.replace("unix://", ""),
+          path: path,
+          method: method,
+          headers: this.buildHeaders(options),
+        };
+      } else {
+        const url = new URL(path, this.vaultUrl);
+        reqOptions = {
+          hostname: url.hostname,
+          port: url.port,
+          path: url.pathname + url.search,
+          method: method,
+          headers: this.buildHeaders(options),
+        };
+      }
+
+      const req = http.request(reqOptions, (res) => {
+        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+          const webStream = new ReadableStream<Uint8Array>({
+            start(controller) {
+              res.on("data", (chunk: Buffer) => {
+                controller.enqueue(new Uint8Array(chunk));
+              });
+              res.on("end", () => {
+                controller.close();
+              });
+              res.on("error", (err) => {
+                controller.error(err);
+              });
+            },
+            cancel() {
+              res.destroy();
+            },
+          });
+          resolve(webStream);
+        } else {
+          let errData = "";
+          res.on("data", (chunk) => {
+            errData += chunk;
+          });
+          res.on("end", () => {
+            reject(new Error(`Vault returned ${res.statusCode}: ${errData}`));
+          });
+        }
+      });
+
+      req.on("error", (error) => {
+        console.error(`${method} stream request failed to ${path}:`, error);
+        reject(error);
+      });
+
+      if (body) {
+        req.write(JSON.stringify(body));
+      }
+
+      req.end();
+    });
+  }
+
   static async sendGetRequest<T>(path: string, options?: VaultRequestOptions): Promise<VaultResponse<T>> {
     return this.request<T>("GET", path, undefined, options);
   }

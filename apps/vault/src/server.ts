@@ -626,6 +626,74 @@ export function createVaultHttpServer() {
         return;
       }
 
+      // 13b. Send message with live SSE streaming
+      if (method === "POST" && pathname === "/chats/messages/stream") {
+        const body = await readJsonBody<{
+          chatId?: string;
+          projectId?: string | null;
+          message?: string;
+          provider?: string;
+          model?: string;
+          thinkingLevel?: "low" | "medium" | "high" | "none";
+          fileIds?: string[];
+        }>(req);
+
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+
+        const sessionToken = req.headers["x-session-token"] as string;
+
+        if (!body.message || typeof body.message !== "string" || !body.message.trim()) {
+          sendJson(res, 400, { error: "message is required and must be a non-empty string." });
+          return;
+        }
+
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          "Connection": "keep-alive",
+          "X-Accel-Buffering": "no",
+        });
+
+        try {
+          const result = await sendMessageAndExecute({
+            chatId: body.chatId,
+            projectId: body.projectId,
+            message: body.message,
+            provider: body.provider,
+            model: body.model,
+            thinkingLevel: body.thinkingLevel,
+            fileIds: body.fileIds,
+            sessionToken,
+            onChunk: (chunk: string) => {
+              res.write(`data: ${JSON.stringify({ type: "chunk", text: chunk })}\n\n`);
+            },
+          });
+
+          res.write(
+            `data: ${JSON.stringify({
+              type: "done",
+              chat: result.chat,
+              userMessage: result.userMessage,
+              assistantMessage: result.assistantMessage,
+            })}\n\n`
+          );
+          res.end();
+        } catch (err: any) {
+          console.error("Streaming chat error:", err);
+          res.write(
+            `data: ${JSON.stringify({
+              type: "error",
+              error: err?.message || "Failed to process chat message.",
+            })}\n\n`
+          );
+          res.end();
+        }
+        return;
+      }
+
       // 14. Get chat messages
       if (method === "GET" && pathname.startsWith("/chats/") && pathname.endsWith("/messages")) {
         if (!authenticateSessionToken(req)) {

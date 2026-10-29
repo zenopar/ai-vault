@@ -21,6 +21,7 @@ export async function getSettings(sessionToken: string): Promise<SettingsDto> {
       systemPrompt: DEFAULT_SYSTEM_PROMPT,
       tokenTiers: DEFAULT_TOKEN_TIERS,
       maxCostPerRequest: DEFAULT_MAX_COST,
+      budgetControlEnabled: true,
     };
   }
 
@@ -28,6 +29,7 @@ export async function getSettings(sessionToken: string): Promise<SettingsDto> {
     let systemPrompt = DEFAULT_SYSTEM_PROMPT;
     let tokenTiers = DEFAULT_TOKEN_TIERS;
     let maxCostPerRequest = DEFAULT_MAX_COST;
+    const budgetControlEnabled = record.budget_control_enabled ?? true;
     let titlePrompt: string | undefined = undefined;
     const titleApiKeyId = record.title_api_key_id ?? null;
     const titleModelId = record.title_model_id ?? null;
@@ -115,6 +117,7 @@ export async function getSettings(sessionToken: string): Promise<SettingsDto> {
       systemPrompt,
       tokenTiers,
       maxCostPerRequest,
+      budgetControlEnabled,
       titlePrompt,
       titleApiKeyId,
       titleModelId,
@@ -123,12 +126,12 @@ export async function getSettings(sessionToken: string): Promise<SettingsDto> {
 }
 
 export async function updateSettings(
-  params: { systemPrompt?: string; tokenTiers?: TokenTierDto[]; maxCostPerRequest?: number; titlePrompt?: string; titleApiKeyId?: string | null; titleModelId?: string | null; },
+  params: { systemPrompt?: string; tokenTiers?: TokenTierDto[]; maxCostPerRequest?: number; budgetControlEnabled?: boolean; titlePrompt?: string; titleApiKeyId?: string | null; titleModelId?: string | null; },
   sessionToken: string
 ): Promise<SettingsDto> {
   const currentRecord = await getSettingsRecord();
   const id = currentRecord?.id || "temp"; // The repository upsert handles randomUUID if new.
-  
+
   // If it's totally new, the repo will generate an ID.
   // To avoid AAD mismatch if we encrypt with a fake ID, we must ensure the record exists first.
   let targetId = id;
@@ -183,10 +186,14 @@ export async function updateSettings(
     }
   });
 
+  if (params.budgetControlEnabled !== undefined) {
+    updateData.budget_control_enabled = params.budgetControlEnabled;
+  }
+
   if (params.titleApiKeyId !== undefined) {
     updateData.title_api_key_id = params.titleApiKeyId;
   }
-  
+
   if (params.titleModelId !== undefined) {
     updateData.title_model_id = params.titleModelId;
   }

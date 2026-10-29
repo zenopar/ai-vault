@@ -196,6 +196,7 @@ model settings {
   encrypted_max_cost_per_request String?
   max_cost_per_request_iv        String?  @db.VarChar(32)
   max_cost_per_request_tag       String?  @db.VarChar(32)
+  budget_control_enabled         Boolean  @default(true)
 
   encrypted_title_prompt         String?
   title_prompt_iv                String?  @db.VarChar(32)

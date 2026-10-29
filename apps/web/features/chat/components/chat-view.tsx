@@ -62,9 +62,6 @@ export function ChatView({
   const [pendingChatIds, setPendingChatIds] = useState<Set<string>>(new Set());
   const [isNewChatPending, setIsNewChatPending] = useState(false);
 
-  // Live text streaming ID
-  const [liveMessageId, setLiveMessageId] = useState<string | null>(null);
-
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<ProjectDto | null>(null);
 
@@ -109,12 +106,6 @@ export function ChatView({
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, isCurrentChatPending, isLoadingChat]);
-
-  const handleLiveScroll = () => {
-    if (shouldAutoScrollToBottomRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  };
 
   const handleScroll = () => {
     const container = scrollContainerRef.current;
@@ -172,7 +163,6 @@ export function ChatView({
     setActiveChatId(chatId);
     activeChatIdRef.current = chatId;
     currentChatKeyRef.current = chatId;
-    setLiveMessageId(null);
 
     // 2. Restore draft for newly selected chat
     const targetDraft = draftsRef.current[chatId] || { text: "", attachments: [] };
@@ -226,7 +216,6 @@ export function ChatView({
     setMessages([]);
     setHasMore(false);
     setError(null);
-    setLiveMessageId(null);
 
     // 2. Restore draft for new chat
     const targetDraft = draftsRef.current["new-chat"] || { text: "", attachments: [] };
@@ -250,7 +239,6 @@ export function ChatView({
     setMessages([]);
     setHasMore(false);
     setError(null);
-    setLiveMessageId(null);
 
     const targetDraft = draftsRef.current["new-chat"] || { text: "", attachments: [] };
     inputDeckRef.current?.restoreDraft(targetDraft.text, targetDraft.attachments);
@@ -364,20 +352,19 @@ export function ChatView({
       updatedAt: new Date().toISOString(),
     };
 
+    const tempAssistantId = `temp-assistant-${Date.now()}`;
+    const tempAssistantMsg: ChatMessageDto = {
+      id: tempAssistantId,
+      chatId: sentChatId || "pending",
+      role: "assistant",
+      content: "",
+      sequenceNumber: messages.length + 2,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
     setMessages((prev) => [...prev, tempUserMsg]);
 
-    const formData = new FormData();
-    if (sentChatId) formData.append("chatId", sentChatId);
-    if (!sentChatId && activeProjectId) formData.append("projectId", activeProjectId);
-    formData.append("message", trimmed);
-    formData.append("provider", provider);
-    formData.append("model", selectedModel);
-    formData.append("thinkingLevel", thinkingLevel);
-    if (fileIds && fileIds.length > 0) {
-      formData.append("fileIds", JSON.stringify(fileIds));
-    }
-
-    // Preserve the message & attachments so we can restore them to the textbox if request fails!
     const savedDraft: { text: string; attachments: PendingAttachment[] } = {
       text: rawInput !== undefined ? rawInput : messageText,
       attachments: originalAttachments || [],
@@ -390,36 +377,100 @@ export function ChatView({
     }
 
     try {
-      const res = await sendMessageAction(formData);
+      const res = await fetch("/api/chats/messages/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chatId: sentChatId || undefined,
+          projectId: !sentChatId ? (activeProjectId || undefined) : undefined,
+          message: trimmed,
+          provider,
+          model: selectedModel,
+          thinkingLevel,
+          fileIds: fileIds && fileIds.length > 0 ? fileIds : undefined,
+        }),
+      });
 
-      if (!res.success || !res.data) {
-        const errorMsg = res.error || "Failed to process message.";
-        setError(errorMsg);
-
-        // Remove the temporary message from the chat list
-        setMessages((prev) => prev.filter((m) => m.id !== tempUserMsg.id));
-
-        // RESTORE THE MESSAGE TO THE TEXTBOX so user doesn't lose it!
-        const isStillInSameChat = isNewChat
-          ? activeChatIdRef.current === null
-          : activeChatIdRef.current === sentChatId;
-
-        if (isStillInSameChat) {
-          inputDeckRef.current?.restoreDraft(savedDraft.text, savedDraft.attachments);
-          inputDeckRef.current?.focus();
-        } else {
-          // If the user already switched chats, save it to that chat's draft
-          draftsRef.current[chatKey] = savedDraft;
+      if (!res.ok) {
+        let errMessage = "Failed to send message.";
+        try {
+          const errData = await res.json();
+          errMessage = errData.error || errMessage;
+        } catch {
+          // ignore
         }
-        return;
+        throw new Error(errMessage);
       }
 
-      // Success! Clear draft for this completed chat
+      if (!res.body) {
+        throw new Error("No response body received from server.");
+      }
+
+      // Add temporary assistant placeholder
+      setMessages((prev) => [...prev, tempAssistantMsg]);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let accumulatedText = "";
+      let streamDoneData: {
+        chat: ChatMetadata;
+        userMessage: ChatMessageDto;
+        assistantMessage: ChatMessageDto;
+      } | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          if (!trimmedLine.startsWith("data:")) continue;
+          const jsonStr = trimmedLine.replace(/^data:\s*/, "");
+          if (!jsonStr) continue;
+
+          let evt: any = null;
+          try {
+            evt = JSON.parse(jsonStr);
+            if (evt.type === "chunk" && typeof evt.text === "string") {
+              accumulatedText += evt.text;
+              const currentContent = accumulatedText;
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === tempAssistantId ? { ...m, content: currentContent } : m
+                )
+              );
+              if (shouldAutoScrollToBottomRef.current) {
+                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+              }
+            } else if (evt.type === "done") {
+              streamDoneData = {
+                chat: evt.chat,
+                userMessage: evt.userMessage,
+                assistantMessage: evt.assistantMessage,
+              };
+            } else if (evt.type === "error") {
+              throw new Error(evt.error || "Streaming failed");
+            }
+          } catch (e: any) {
+            if (e.message?.includes("Streaming failed") || evt?.type === "error") {
+              throw e;
+            }
+          }
+        }
+      }
+
+      if (!streamDoneData) {
+        throw new Error("Stream closed before completion.");
+      }
+
       delete draftsRef.current[chatKey];
 
-      const { chat, userMessage, assistantMessage } = res.data;
+      const { chat, userMessage, assistantMessage } = streamDoneData;
 
-      // Always update sidebar chat list
       setChats((prev) => {
         const exists = prev.some((c) => c.id === chat.id);
         return exists
@@ -427,10 +478,19 @@ export function ChatView({
           : [chat, ...prev];
       });
 
-      // Check if user is STILL viewing the chat that just received the answer
       const isStillInSameChat = isNewChat
         ? activeChatIdRef.current === null
         : activeChatIdRef.current === sentChatId;
+
+      if (sentChatId) {
+        setPendingChatIds((prev) => {
+          const next = new Set(prev);
+          next.delete(sentChatId);
+          return next;
+        });
+      } else {
+        setIsNewChatPending(false);
+      }
 
       if (isStillInSameChat) {
         if (isNewChat) {
@@ -443,19 +503,17 @@ export function ChatView({
           }
         }
         setMessages((prev) => [
-          ...prev.filter((m) => m.id !== tempUserMsg.id),
+          ...prev.filter((m) => m.id !== tempUserMsg.id && m.id !== tempAssistantId),
           userMessage,
           assistantMessage,
         ]);
-        setLiveMessageId(assistantMessage.id);
       }
-      // If user switched to another chat while generation was running,
-      // we do NOT change activeChatId, we do NOT change window.history,
-      // and we do NOT inject chat A's messages into chat B!
     } catch (err: any) {
-      console.error("Message send error:", err);
+      console.error("Message stream error:", err);
       setError(err?.message || "Failed to send message.");
-      setMessages((prev) => prev.filter((m) => m.id !== tempUserMsg.id));
+      setMessages((prev) =>
+        prev.filter((m) => m.id !== tempUserMsg.id && m.id !== tempAssistantId)
+      );
 
       const isStillInSameChat = isNewChat
         ? activeChatIdRef.current === null
@@ -587,14 +645,15 @@ export function ChatView({
                     key={m.id}
                     message={m}
                     onAttachFile={handleAttachFile}
-                    isLive={m.id === liveMessageId}
-                    onLiveUpdate={handleLiveScroll}
-                    onLiveComplete={() => setLiveMessageId(null)}
+                    isStreaming={m.id.startsWith("temp-assistant-")}
                   />
                 ))}
-                {(isCurrentChatPending || isLoadingChat) && (
-                  <ThinkingAura modelName={selectedModel} thinkingLevel={thinkingLevel} />
-                )}
+                {(isCurrentChatPending || isLoadingChat) &&
+                  !messages.some(
+                    (m) => m.role === "assistant" && m.content.trim().length > 0
+                  ) && (
+                    <ThinkingAura modelName={selectedModel} thinkingLevel={thinkingLevel} />
+                  )}
               </div>
             )}
 

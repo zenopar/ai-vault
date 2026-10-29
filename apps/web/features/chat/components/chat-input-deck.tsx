@@ -688,8 +688,8 @@ export const ChatInputDeck = forwardRef<ChatInputDeckHandle, ChatInputDeckProps>
                     : "Mód: Enter odřádkuje / Ctrl+Enter odesílá. Klikněte pro přepnutí na Enter pro odeslání."
                 }
               >
-                <span className="text-neutral-500">{sendOnEnter ? "send:" : "odřádkovat:"}</span>
-                <span className="text-neutral-300 font-medium">{sendOnEnter ? "Enter ↵" : "Ctrl+↵"}</span>
+                <span className="text-neutral-500">Enter:</span>
+                <span className="text-neutral-300 font-medium">{sendOnEnter ? "send" : "newline"}</span>
               </button>
 
               <Button
