@@ -16,13 +16,18 @@ import { AiApiKeyMetadata, AiModelMetadata, ChatAttachmentDto, ProjectDto } from
 import { Button, DropdownSelect } from "@/shared/components";
 import { AttachmentPreviewDeck, PendingAttachment } from "./attachment-preview-deck";
 
+export type { PendingAttachment } from "./attachment-preview-deck";
+
 export interface ChatInputDeckHandle {
   attachFile: (dto: ChatAttachmentDto) => void;
   focus: () => void;
+  setInputText: (text: string) => void;
+  restoreDraft: (text: string, attachments?: PendingAttachment[]) => void;
+  getDraft: () => { text: string; attachments: PendingAttachment[] };
 }
 
 interface ChatInputDeckProps {
-  onSubmit: (message: string, fileIds?: string[]) => void;
+  onSubmit: (message: string, fileIds?: string[], attachments?: PendingAttachment[], rawInput?: string) => void;
   disabled: boolean;
   keys: AiApiKeyMetadata[];
   selectedKeyId: string;
@@ -77,6 +82,34 @@ export const ChatInputDeck = forwardRef<ChatInputDeckHandle, ChatInputDeckProps>
   const [showChatFilesPopover, setShowChatFilesPopover] = useState(false);
   const [chatFiles, setChatFiles] = useState<ChatAttachmentDto[]>([]);
   const [isLoadingChatFiles, setIsLoadingChatFiles] = useState(false);
+
+  // Preference for whether Enter sends (true) or odřádkuje / newlines (false)
+  const [sendOnEnter, setSendOnEnter] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("vault_send_on_enter");
+        if (saved !== null) return saved === "true";
+      } catch {
+        // ignore
+      }
+    }
+    // Default to false so Enter allows newline (odřádkování) and Ctrl+Enter sends!
+    return false;
+  });
+
+  const toggleSendOnEnter = () => {
+    setSendOnEnter((prev) => {
+      const next = !prev;
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("vault_send_on_enter", String(next));
+        } catch {
+          // ignore
+        }
+      }
+      return next;
+    });
+  };
 
   useIsomorphicLayoutEffect(() => {
     const el = textareaRef.current;
@@ -168,8 +201,27 @@ export const ChatInputDeck = forwardRef<ChatInputDeckHandle, ChatInputDeckProps>
     () => ({
       attachFile: attachExistingFile,
       focus: () => textareaRef.current?.focus(),
+      setInputText: (text: string) => {
+        setInput(text);
+        if (textareaRef.current) {
+          textareaRef.current.style.height = "auto";
+        }
+      },
+      restoreDraft: (text: string, newAttachments?: PendingAttachment[]) => {
+        setInput(text);
+        if (newAttachments) {
+          setAttachments(newAttachments);
+        }
+        if (textareaRef.current) {
+          textareaRef.current.style.height = "auto";
+        }
+      },
+      getDraft: () => ({
+        text: input,
+        attachments: attachments,
+      }),
     }),
-    [attachExistingFile]
+    [attachExistingFile, input, attachments]
   );
 
   const handleToggleChatFiles = async () => {
@@ -249,7 +301,15 @@ export const ChatInputDeck = forwardRef<ChatInputDeckHandle, ChatInputDeckProps>
       .filter((a) => a.uploadStatus === "ready" && a.dto?.id)
       .map((a) => a.dto!.id);
 
-    onSubmit(trimmed, readyFileIds.length > 0 ? readyFileIds : undefined);
+    const savedAttachments = [...attachments];
+    const savedRawInput = input;
+
+    onSubmit(
+      trimmed,
+      readyFileIds.length > 0 ? readyFileIds : undefined,
+      savedAttachments,
+      savedRawInput
+    );
     setInput("");
     setAttachments([]);
     if (textareaRef.current) {
@@ -258,9 +318,31 @@ export const ChatInputDeck = forwardRef<ChatInputDeckHandle, ChatInputDeckProps>
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.nativeEvent.isComposing) return;
+
+    const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+
+    // Ctrl+Enter or Cmd+Enter: always send
+    if (e.key === "Enter" && isCtrlOrCmd) {
       e.preventDefault();
       triggerSubmit();
+      return;
+    }
+
+    // Shift+Enter: always insert newline (browser native behavior)
+    if (e.key === "Enter" && e.shiftKey) {
+      return;
+    }
+
+    // Plain Enter:
+    if (e.key === "Enter") {
+      if (sendOnEnter) {
+        // Send mode
+        e.preventDefault();
+        triggerSubmit();
+      } else {
+        // Newline mode (odřádkování) - do nothing, let native textarea insert \n
+      }
     }
   };
 
@@ -594,19 +676,40 @@ export const ChatInputDeck = forwardRef<ChatInputDeckHandle, ChatInputDeckProps>
               </div>
             </div>
 
-            {/* Right side: Send button */}
-            <div className="shrink-0 self-end sm:self-center">
+            {/* Right side: Shortcut mode toggle + Send button */}
+            <div className="shrink-0 self-end sm:self-center flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={toggleSendOnEnter}
+                className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10.5px] font-mono text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.06] border border-transparent hover:border-white/[0.08] transition-colors cursor-pointer"
+                title={
+                  sendOnEnter
+                    ? "Mód: Enter odesílá / Shift+Enter odřádkuje. Klikněte pro přepnutí na Enter pro novou řádku."
+                    : "Mód: Enter odřádkuje / Ctrl+Enter odesílá. Klikněte pro přepnutí na Enter pro odeslání."
+                }
+              >
+                <span className="text-neutral-500">{sendOnEnter ? "send:" : "odřádkovat:"}</span>
+                <span className="text-neutral-300 font-medium">{sendOnEnter ? "Enter ↵" : "Ctrl+↵"}</span>
+              </button>
+
               <Button
                 type="button"
                 size="sm"
                 onClick={triggerSubmit}
                 disabled={!canSubmit}
-                className="px-3 py-1.5 sm:px-3.5 sm:py-1 font-mono text-xs shadow-none"
+                className="px-3 py-1.5 sm:px-3.5 sm:py-1 font-mono text-xs shadow-none cursor-pointer"
+                title={sendOnEnter ? "Odeslat (Enter)" : "Odeslat (Ctrl+Enter)"}
               >
-                {disabled ? "..." : isAnyUploading ? "Encrypting..." : (
-                  <span className="flex items-center gap-1">
+                {disabled ? (
+                  "..."
+                ) : isAnyUploading ? (
+                  "Encrypting..."
+                ) : (
+                  <span className="flex items-center gap-1.5">
                     <span>Send</span>
-                    <span className="hidden sm:inline">↵</span>
+                    <span className="hidden sm:inline opacity-60 text-[10px]">
+                      {sendOnEnter ? "↵" : "Ctrl+↵"}
+                    </span>
                   </span>
                 )}
               </Button>

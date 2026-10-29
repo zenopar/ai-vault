@@ -21,7 +21,7 @@ import { ChatSidebar } from "./chat-sidebar";
 import { ProjectModal } from "./project-modal";
 import { ChatMessageItem } from "./chat-message-item";
 import { ThinkingAura } from "./thinking-aura";
-import { ChatInputDeck, type ChatInputDeckHandle } from "./chat-input-deck";
+import { ChatInputDeck, type ChatInputDeckHandle, type PendingAttachment } from "./chat-input-deck";
 import { ErrorAlert, Button } from "@/shared/components";
 import { AutoLockGuard } from "@/features/vault/components/auto-lock-guard";
 
@@ -54,8 +54,16 @@ export function ChatView({
   const [messages, setMessages] = useState<ChatMessageDto[]>(initialMessages);
   const [hasMore, setHasMore] = useState<boolean>(initialHasMore);
   const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
+  const [isLoadingChat, setIsLoadingChat] = useState<boolean>(false);
   const [keys] = useState<AiApiKeyMetadata[]>(initialKeys);
   const [models] = useState<AiModelMetadata[]>(initialModels);
+
+  // Background request tracking per chat
+  const [pendingChatIds, setPendingChatIds] = useState<Set<string>>(new Set());
+  const [isNewChatPending, setIsNewChatPending] = useState(false);
+
+  // Live text streaming ID
+  const [liveMessageId, setLiveMessageId] = useState<string | null>(null);
 
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<ProjectDto | null>(null);
@@ -77,12 +85,16 @@ export function ChatView({
   const [thinkingLevel, setThinkingLevel] = useState<"none" | "low" | "medium" | "high">("medium");
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isPending, setIsPending] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const inputDeckRef = useRef<ChatInputDeckHandle>(null);
   const shouldAutoScrollToBottomRef = useRef<boolean>(true);
+
+  // Refs for tracking active chat and drafts to prevent race conditions when switching chats
+  const activeChatIdRef = useRef<string | null>(initialChatId);
+  const currentChatKeyRef = useRef<string>(initialChatId || "new-chat");
+  const draftsRef = useRef<Record<string, { text: string; attachments: PendingAttachment[] }>>({});
 
   const activeProject = projects.find((p) => p.id === activeProjectId) || null;
 
@@ -90,11 +102,19 @@ export function ChatView({
     inputDeckRef.current?.attachFile(file);
   };
 
+  const isCurrentChatPending = activeChatId ? pendingChatIds.has(activeChatId) : isNewChatPending;
+
   useEffect(() => {
     if (shouldAutoScrollToBottomRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, isPending]);
+  }, [messages, isCurrentChatPending, isLoadingChat]);
+
+  const handleLiveScroll = () => {
+    if (shouldAutoScrollToBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  };
 
   const handleScroll = () => {
     const container = scrollContainerRef.current;
@@ -142,8 +162,22 @@ export function ChatView({
 
   const handleSelectChat = async (chatId: string) => {
     if (chatId === activeChatId) return;
+
+    // 1. Save draft from currently viewed chat
+    if (inputDeckRef.current) {
+      draftsRef.current[currentChatKeyRef.current] = inputDeckRef.current.getDraft();
+    }
+
     setError(null);
     setActiveChatId(chatId);
+    activeChatIdRef.current = chatId;
+    currentChatKeyRef.current = chatId;
+    setLiveMessageId(null);
+
+    // 2. Restore draft for newly selected chat
+    const targetDraft = draftsRef.current[chatId] || { text: "", attachments: [] };
+    inputDeckRef.current?.restoreDraft(targetDraft.text, targetDraft.attachments);
+
     const selectedChatMeta = chats.find((c) => c.id === chatId);
     if (selectedChatMeta) {
       setActiveProjectId(selectedChatMeta.projectId ?? null);
@@ -152,33 +186,52 @@ export function ChatView({
     if (typeof window !== "undefined") {
       window.history.replaceState(null, "", `/app?c=${chatId}`);
     }
-    setIsPending(true);
+
+    setIsLoadingChat(true);
     try {
       const res = await getChatMessagesAction(chatId, 30, 0, "desc");
-      if (res.success && res.data) {
-        const reversed = (res.data.messages || []).slice().reverse();
-        setMessages(reversed);
-        setHasMore(Boolean(res.data.hasMore));
-        if (res.data.chat) {
-          setActiveProjectId(res.data.chat.projectId ?? null);
-          setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, ...res.data?.chat } : c)));
+      // Verify user has not navigated away to another chat while fetching
+      if (activeChatIdRef.current === chatId) {
+        if (res.success && res.data) {
+          const reversed = (res.data.messages || []).slice().reverse();
+          setMessages(reversed);
+          setHasMore(Boolean(res.data.hasMore));
+          if (res.data.chat) {
+            setActiveProjectId(res.data.chat.projectId ?? null);
+            setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, ...res.data?.chat } : c)));
+          }
+        } else {
+          setError(res.error || "Failed to load chat.");
         }
-      } else {
-        setError(res.error || "Failed to load chat.");
       }
     } finally {
-      setIsPending(false);
+      if (activeChatIdRef.current === chatId) {
+        setIsLoadingChat(false);
+      }
     }
     if (window.innerWidth < 768) setSidebarOpen(false);
   };
 
   const handleNewChat = (projectId?: string | null) => {
+    // 1. Save draft from currently viewed chat
+    if (inputDeckRef.current) {
+      draftsRef.current[currentChatKeyRef.current] = inputDeckRef.current.getDraft();
+    }
+
     const nextProjectId = projectId !== undefined ? projectId : activeProjectId;
     setActiveChatId(null);
+    activeChatIdRef.current = null;
+    currentChatKeyRef.current = "new-chat";
     setActiveProjectId(nextProjectId);
     setMessages([]);
     setHasMore(false);
     setError(null);
+    setLiveMessageId(null);
+
+    // 2. Restore draft for new chat
+    const targetDraft = draftsRef.current["new-chat"] || { text: "", attachments: [] };
+    inputDeckRef.current?.restoreDraft(targetDraft.text, targetDraft.attachments);
+
     shouldAutoScrollToBottomRef.current = true;
     if (typeof window !== "undefined") {
       window.history.replaceState(null, "", nextProjectId ? `/app?p=${nextProjectId}` : "/app");
@@ -187,11 +240,21 @@ export function ChatView({
   };
 
   const handleSelectProject = (projectId: string | null) => {
+    if (inputDeckRef.current) {
+      draftsRef.current[currentChatKeyRef.current] = inputDeckRef.current.getDraft();
+    }
     setActiveProjectId(projectId);
     setActiveChatId(null);
+    activeChatIdRef.current = null;
+    currentChatKeyRef.current = "new-chat";
     setMessages([]);
     setHasMore(false);
     setError(null);
+    setLiveMessageId(null);
+
+    const targetDraft = draftsRef.current["new-chat"] || { text: "", attachments: [] };
+    inputDeckRef.current?.restoreDraft(targetDraft.text, targetDraft.attachments);
+
     if (typeof window !== "undefined") {
       window.history.replaceState(null, "", projectId ? `/app?p=${projectId}` : "/app");
     }
@@ -235,7 +298,6 @@ export function ChatView({
   };
 
   const handleDeleteProject = async (projectId: string) => {
-    setIsPending(true);
     try {
       const res = await deleteProjectAction(projectId);
       if (res.success) {
@@ -247,16 +309,16 @@ export function ChatView({
       } else {
         setError(res.error || "Failed to delete project.");
       }
-    } finally {
-      setIsPending(false);
+    } catch (e: any) {
+      setError(e?.message || "Failed to delete project.");
     }
   };
 
   const handleDeleteChat = async (chatId: string) => {
-    setIsPending(true);
     try {
       const res = await deleteChatAction(chatId);
       if (res.success) {
+        delete draftsRef.current[chatId];
         setChats((prev) => prev.filter((c) => c.id !== chatId));
         if (activeChatId === chatId) {
           handleNewChat(activeProjectId);
@@ -264,14 +326,28 @@ export function ChatView({
       } else {
         setError(res.error || "Failed to delete chat.");
       }
-    } finally {
-      setIsPending(false);
+    } catch (e: any) {
+      setError(e?.message || "Failed to delete chat.");
     }
   };
 
-  const handleSendMessage = async (messageText: string, fileIds?: string[]) => {
+  const handleSendMessage = async (
+    messageText: string,
+    fileIds?: string[],
+    originalAttachments?: PendingAttachment[],
+    rawInput?: string
+  ) => {
     const trimmed = messageText.trim();
-    if ((!trimmed && (!fileIds || fileIds.length === 0)) || isPending) return;
+    if (!trimmed && (!fileIds || fileIds.length === 0)) return;
+
+    const sentChatId = activeChatId;
+    const isNewChat = !sentChatId;
+    const chatKey = sentChatId || "new-chat";
+
+    // Prevent double sending on the same active chat
+    if (sentChatId && pendingChatIds.has(sentChatId)) return;
+    if (isNewChat && isNewChatPending) return;
+
     setError(null);
     shouldAutoScrollToBottomRef.current = true;
 
@@ -280,7 +356,7 @@ export function ChatView({
 
     const tempUserMsg: ChatMessageDto = {
       id: `temp-${Date.now()}`,
-      chatId: activeChatId || "pending",
+      chatId: sentChatId || "pending",
       role: "user",
       content: trimmed,
       sequenceNumber: messages.length + 1,
@@ -291,8 +367,8 @@ export function ChatView({
     setMessages((prev) => [...prev, tempUserMsg]);
 
     const formData = new FormData();
-    if (activeChatId) formData.append("chatId", activeChatId);
-    if (!activeChatId && activeProjectId) formData.append("projectId", activeProjectId);
+    if (sentChatId) formData.append("chatId", sentChatId);
+    if (!sentChatId && activeProjectId) formData.append("projectId", activeProjectId);
     formData.append("message", trimmed);
     formData.append("provider", provider);
     formData.append("model", selectedModel);
@@ -301,17 +377,49 @@ export function ChatView({
       formData.append("fileIds", JSON.stringify(fileIds));
     }
 
-    setIsPending(true);
+    // Preserve the message & attachments so we can restore them to the textbox if request fails!
+    const savedDraft: { text: string; attachments: PendingAttachment[] } = {
+      text: rawInput !== undefined ? rawInput : messageText,
+      attachments: originalAttachments || [],
+    };
+
+    if (sentChatId) {
+      setPendingChatIds((prev) => new Set(prev).add(sentChatId));
+    } else {
+      setIsNewChatPending(true);
+    }
+
     try {
       const res = await sendMessageAction(formData);
+
       if (!res.success || !res.data) {
-        setError(res.error || "Failed to process message.");
+        const errorMsg = res.error || "Failed to process message.";
+        setError(errorMsg);
+
+        // Remove the temporary message from the chat list
         setMessages((prev) => prev.filter((m) => m.id !== tempUserMsg.id));
+
+        // RESTORE THE MESSAGE TO THE TEXTBOX so user doesn't lose it!
+        const isStillInSameChat = isNewChat
+          ? activeChatIdRef.current === null
+          : activeChatIdRef.current === sentChatId;
+
+        if (isStillInSameChat) {
+          inputDeckRef.current?.restoreDraft(savedDraft.text, savedDraft.attachments);
+          inputDeckRef.current?.focus();
+        } else {
+          // If the user already switched chats, save it to that chat's draft
+          draftsRef.current[chatKey] = savedDraft;
+        }
         return;
       }
 
+      // Success! Clear draft for this completed chat
+      delete draftsRef.current[chatKey];
+
       const { chat, userMessage, assistantMessage } = res.data;
 
+      // Always update sidebar chat list
       setChats((prev) => {
         const exists = prev.some((c) => c.id === chat.id);
         return exists
@@ -319,14 +427,56 @@ export function ChatView({
           : [chat, ...prev];
       });
 
-      setActiveChatId(chat.id);
-      setActiveProjectId(chat.projectId ?? null);
-      if (typeof window !== "undefined") {
-        window.history.replaceState(null, "", `/app?c=${chat.id}`);
+      // Check if user is STILL viewing the chat that just received the answer
+      const isStillInSameChat = isNewChat
+        ? activeChatIdRef.current === null
+        : activeChatIdRef.current === sentChatId;
+
+      if (isStillInSameChat) {
+        if (isNewChat) {
+          currentChatKeyRef.current = chat.id;
+          setActiveChatId(chat.id);
+          activeChatIdRef.current = chat.id;
+          setActiveProjectId(chat.projectId ?? null);
+          if (typeof window !== "undefined") {
+            window.history.replaceState(null, "", `/app?c=${chat.id}`);
+          }
+        }
+        setMessages((prev) => [
+          ...prev.filter((m) => m.id !== tempUserMsg.id),
+          userMessage,
+          assistantMessage,
+        ]);
+        setLiveMessageId(assistantMessage.id);
       }
-      setMessages((prev) => [...prev.filter((m) => m.id !== tempUserMsg.id), userMessage, assistantMessage]);
+      // If user switched to another chat while generation was running,
+      // we do NOT change activeChatId, we do NOT change window.history,
+      // and we do NOT inject chat A's messages into chat B!
+    } catch (err: any) {
+      console.error("Message send error:", err);
+      setError(err?.message || "Failed to send message.");
+      setMessages((prev) => prev.filter((m) => m.id !== tempUserMsg.id));
+
+      const isStillInSameChat = isNewChat
+        ? activeChatIdRef.current === null
+        : activeChatIdRef.current === sentChatId;
+
+      if (isStillInSameChat) {
+        inputDeckRef.current?.restoreDraft(savedDraft.text, savedDraft.attachments);
+        inputDeckRef.current?.focus();
+      } else {
+        draftsRef.current[chatKey] = savedDraft;
+      }
     } finally {
-      setIsPending(false);
+      if (sentChatId) {
+        setPendingChatIds((prev) => {
+          const next = new Set(prev);
+          next.delete(sentChatId);
+          return next;
+        });
+      } else {
+        setIsNewChatPending(false);
+      }
     }
   };
 
@@ -433,9 +583,18 @@ export function ChatView({
             {messages.length > 0 && (
               <div className="max-w-4xl mx-auto">
                 {messages.map((m) => (
-                  <ChatMessageItem key={m.id} message={m} onAttachFile={handleAttachFile} />
+                  <ChatMessageItem
+                    key={m.id}
+                    message={m}
+                    onAttachFile={handleAttachFile}
+                    isLive={m.id === liveMessageId}
+                    onLiveUpdate={handleLiveScroll}
+                    onLiveComplete={() => setLiveMessageId(null)}
+                  />
                 ))}
-                {isPending && <ThinkingAura modelName={selectedModel} thinkingLevel={thinkingLevel} />}
+                {(isCurrentChatPending || isLoadingChat) && (
+                  <ThinkingAura modelName={selectedModel} thinkingLevel={thinkingLevel} />
+                )}
               </div>
             )}
 
@@ -444,9 +603,8 @@ export function ChatView({
 
           <ChatInputDeck
             ref={inputDeckRef}
-            key={activeChatId || activeProjectId || "new-chat"}
             onSubmit={handleSendMessage}
-            disabled={isPending}
+            disabled={isCurrentChatPending}
             keys={keys}
             selectedKeyId={selectedKeyId}
             setSelectedKeyId={setSelectedKeyId}

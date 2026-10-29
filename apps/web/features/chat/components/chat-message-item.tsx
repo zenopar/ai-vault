@@ -1,4 +1,6 @@
-import { useState, memo } from "react";
+"use client";
+
+import { useState, useEffect, memo } from "react";
 import { ChatMessageDto, ChatAttachmentDto } from "@ai-vault/types";
 import { MarkdownRenderer } from "./markdown-renderer";
 import { MediaLightbox } from "./media-lightbox";
@@ -8,6 +10,9 @@ import { FileText, Film, Download, Paperclip } from "lucide-react";
 interface ChatMessageItemProps {
   message: ChatMessageDto;
   onAttachFile?: (att: ChatAttachmentDto) => void;
+  isLive?: boolean;
+  onLiveUpdate?: () => void;
+  onLiveComplete?: (id: string) => void;
 }
 
 function formatBytes(bytes: number): string {
@@ -18,7 +23,68 @@ function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
-export const ChatMessageItem = memo(function ChatMessageItem({ message, onAttachFile }: ChatMessageItemProps) {
+interface LiveMarkdownRendererProps {
+  content: string;
+  onUpdate?: () => void;
+  onComplete?: () => void;
+}
+
+function LiveMarkdownRenderer({ content, onUpdate, onComplete }: LiveMarkdownRendererProps) {
+  const [displayedLength, setDisplayedLength] = useState(() => Math.min(content.length, 4));
+  const [isFinished, setIsFinished] = useState(false);
+
+  useEffect(() => {
+    if (!content || displayedLength >= content.length) {
+      setIsFinished(true);
+      onComplete?.();
+      return;
+    }
+
+    const total = content.length;
+    // Chunk size: reveal 2-8 chars per step so it finishes in 1-2.5s smoothly
+    const chunkSize = Math.max(2, Math.floor(total / 60));
+
+    const interval = setInterval(() => {
+      setDisplayedLength((prev) => {
+        const next = Math.min(prev + chunkSize, total);
+        if (next >= total) {
+          clearInterval(interval);
+          setIsFinished(true);
+          onComplete?.();
+        }
+        return next;
+      });
+      onUpdate?.();
+    }, 18);
+
+    return () => clearInterval(interval);
+  }, [content, onComplete, onUpdate]);
+
+  const handleSkip = () => {
+    setDisplayedLength(content.length);
+    setIsFinished(true);
+    onComplete?.();
+  };
+
+  const currentSlice = isFinished ? content : content.slice(0, displayedLength);
+
+  return (
+    <div onClick={handleSkip} title={!isFinished ? "Click to show all" : undefined} className="relative">
+      <MarkdownRenderer content={currentSlice} />
+      {!isFinished && (
+        <span className="inline-block w-2 h-4 ml-1 bg-indigo-400 animate-pulse rounded-[1px] align-middle shadow-[0_0_8px_rgba(129,140,248,0.6)]" />
+      )}
+    </div>
+  );
+}
+
+export const ChatMessageItem = memo(function ChatMessageItem({
+  message,
+  onAttachFile,
+  isLive = false,
+  onLiveUpdate,
+  onLiveComplete,
+}: ChatMessageItemProps) {
   const [copied, setCopied] = useState(false);
   const [activeLightboxAttachment, setActiveLightboxAttachment] = useState<ChatAttachmentDto | null>(null);
   const isAssistant = message.role === "assistant";
@@ -69,7 +135,15 @@ export const ChatMessageItem = memo(function ChatMessageItem({ message, onAttach
           <div className={`${isAssistant ? "w-full" : "text-right"}`}>
             {isAssistant ? (
               <div className="prose-dark font-sans leading-relaxed">
-                <MarkdownRenderer content={message.content} />
+                {isLive ? (
+                  <LiveMarkdownRenderer
+                    content={message.content}
+                    onUpdate={onLiveUpdate}
+                    onComplete={() => onLiveComplete?.(message.id)}
+                  />
+                ) : (
+                  <MarkdownRenderer content={message.content} />
+                )}
               </div>
             ) : (
               <div className="inline-block text-left text-[14.5px] leading-[1.7] whitespace-pre-wrap bg-[#1a1b22] border border-white/[0.08] rounded-2xl px-5 py-3.5 shadow-sm text-neutral-100 font-sans max-w-full">
@@ -148,35 +222,31 @@ export const ChatMessageItem = memo(function ChatMessageItem({ message, onAttach
                 {/* Other File Attachments */}
                 {fileAttachments.length > 0 && (
                   <div className="flex flex-wrap gap-2 mb-3">
-                    {fileAttachments.map((f) => (
+                    {fileAttachments.map((file) => (
                       <div
-                        key={f.id}
-                        className="group/file flex items-center gap-1.5 px-3 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-xl text-neutral-200 font-mono text-xs transition-colors"
+                        key={file.id}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/30 border border-white/[0.06] text-xs font-mono"
                       >
+                        <FileText className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                        <span className="truncate max-w-[150px] text-neutral-300">{file.name}</span>
+                        <span className="text-[10px] text-neutral-500">({formatBytes(file.size)})</span>
                         <a
-                          href={`/api/files/${encodeURIComponent(f.id)}`}
-                          download={f.name}
-                          className="flex items-center gap-2 flex-1 min-w-0 hover:text-white"
+                          href={`/api/files/${encodeURIComponent(file.id)}`}
+                          download={file.name}
+                          className="text-neutral-400 hover:text-white p-0.5 transition-colors ml-1"
                           title="Download file"
                         >
-                          <FileText className="w-4 h-4 text-indigo-400 shrink-0" />
-                          <span className="truncate max-w-[180px] font-medium">{f.name}</span>
-                          <span className="text-[10px] text-neutral-500 shrink-0">{formatBytes(f.size)}</span>
-                          <Download className="w-3.5 h-3.5 text-neutral-400 shrink-0 ml-1 hover:text-white" />
+                          <Download className="w-3 h-3" />
                         </a>
-
                         {onAttachFile && (
-                          <Button
+                          <button
                             type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => onAttachFile(f)}
-                            className="h-6 px-2 py-0.5 text-[10.5px] text-indigo-300 hover:text-white hover:bg-indigo-500/20 rounded-md gap-1 shrink-0 ml-1 border border-indigo-500/20"
-                            title="Attach to new message (reuse file without re-uploading)"
+                            onClick={() => onAttachFile(file)}
+                            className="text-indigo-400 hover:text-indigo-200 p-0.5 transition-colors cursor-pointer"
+                            title="Attach to new prompt"
                           >
-                            <Paperclip className="w-3 h-3 text-indigo-400" />
-                            <span>Attach</span>
-                          </Button>
+                            <Paperclip className="w-3 h-3" />
+                          </button>
                         )}
                       </div>
                     ))}
@@ -188,55 +258,55 @@ export const ChatMessageItem = memo(function ChatMessageItem({ message, onAttach
             )}
           </div>
 
+          {/* Metadata footer */}
+          {isAssistant && (
+            <div className="mt-2 flex items-center gap-2 font-mono text-[11px] text-neutral-500">
+              {message.modelName && (
+                <span className="text-neutral-400 font-medium">{message.modelName}</span>
+              )}
+              {message.inputTokens !== undefined && message.outputTokens !== undefined && (
+                <>
+                  <span>· {message.inputTokens} in</span>
+                  <span>· {message.outputTokens ?? 0} out</span>
+                  {(message.thoughtTokens ?? 0) > 0 && <span>· {message.thoughtTokens} thought</span>}
+                  <span>· {formatCost(message.totalCost)}</span>
+                </>
+              )}
+              {message.createdAt && <span>· {formatTime(message.createdAt)}</span>}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCopy}
+                className="ml-1 text-neutral-500 hover:text-neutral-200 px-1.5 py-0.5 h-auto text-[11px]"
+              >
+                {copied ? "✓ copied" : "copy"}
+              </Button>
+            </div>
+          )}
 
-        {/* Metrics line for assistant */}
-        {isAssistant && (
-          <div className="mt-2.5 flex flex-wrap items-center gap-2 font-mono text-[11px] text-neutral-500">
-            {message.modelName && <span className="text-neutral-400">{message.modelName}</span>}
-            {message.thinkingLevel && message.thinkingLevel !== "none" && <span>· {message.thinkingLevel}</span>}
-            {(message.inputTokens !== undefined || message.outputTokens !== undefined) && (
-              <>
-                <span>· {message.inputTokens ?? 0} in</span>
-                <span>· {message.outputTokens ?? 0} out</span>
-                {(message.thoughtTokens ?? 0) > 0 && <span>· {message.thoughtTokens} thought</span>}
-                <span>· {formatCost(message.totalCost)}</span>
-              </>
-            )}
-            {message.createdAt && <span>· {formatTime(message.createdAt)}</span>}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleCopy}
-              className="ml-1 text-neutral-500 hover:text-neutral-200 px-1.5 py-0.5 h-auto text-[11px]"
-            >
-              {copied ? "✓ copied" : "copy"}
-            </Button>
-          </div>
-        )}
-
-        {/* Copy for user messages */}
-        {!isAssistant && (
-          <div className="mt-1 flex justify-end items-center gap-2 font-mono text-[11px] text-neutral-600">
-            {message.createdAt && <span>{formatTime(message.createdAt)}</span>}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleCopy}
-              className="hover:text-neutral-400 px-1.5 py-0.5 h-auto text-[11px]"
-            >
-              {copied ? "copied" : "copy"}
-            </Button>
-          </div>
-        )}
+          {/* Copy for user messages */}
+          {!isAssistant && (
+            <div className="mt-1 flex justify-end items-center gap-2 font-mono text-[11px] text-neutral-600">
+              {message.createdAt && <span>{formatTime(message.createdAt)}</span>}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCopy}
+                className="hover:text-neutral-400 px-1.5 py-0.5 h-auto text-[11px]"
+              >
+                {copied ? "copied" : "copy"}
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
 
-    {/* Lightbox for full size media inspection */}
-    <MediaLightbox
-      attachment={activeLightboxAttachment}
-      onClose={() => setActiveLightboxAttachment(null)}
-      onAttach={onAttachFile}
-    />
-  </>
+      {/* Lightbox for full size media inspection */}
+      <MediaLightbox
+        attachment={activeLightboxAttachment}
+        onClose={() => setActiveLightboxAttachment(null)}
+        onAttach={onAttachFile}
+      />
+    </>
   );
-});
+});
