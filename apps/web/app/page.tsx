@@ -40,7 +40,7 @@ export default async function Home() {
   if (status.status === "LOCKED" || status.status === "UNLOCKED") {
     return (
       <div className="min-h-screen bg-[#0e0f12] bg-[radial-gradient(ellipse_80%_60%_at_50%_-15%,rgba(120,119,198,0.08),transparent)] text-neutral-100 flex flex-col items-center justify-center p-6">
-        <UnlockVaultForm />
+        <UnlockVaultForm hasPasskeys={Boolean(status.hasPasskeys)} />
       </div>
     );
   }

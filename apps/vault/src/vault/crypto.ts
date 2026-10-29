@@ -51,7 +51,7 @@ export function generateRecoveryPassword(): string {
  */
 export async function deriveKey(password: string, saltHex: string, params: KdfParams = DEFAULT_KDF_PARAMS): Promise<Buffer> {
   const salt = Buffer.from(saltHex, "hex");
-  
+
   const key = await argon2.hash(password, {
     type: argon2.argon2id,
     memoryCost: params.memoryCost,
@@ -68,10 +68,12 @@ export async function deriveKey(password: string, saltHex: string, params: KdfPa
 export const HKDF_INFO_DB = Buffer.from("ai-vault/db/v1", "utf-8");
 export const HKDF_INFO_FILES = Buffer.from("ai-vault/files/v1", "utf-8");
 export const HKDF_INFO_SECRETS = Buffer.from("ai-vault/secrets/v1", "utf-8");
+export const HKDF_INFO_PASSKEY = Buffer.from("ai-vault/passkey/v1", "utf-8");
 
 export const AAD_WRAPPED_VAULT_KEY_MASTER = Buffer.from("ai-vault/wrapped-vault-key/master/v1", "utf-8");
 export const AAD_WRAPPED_VAULT_KEY_RECOVERY = Buffer.from("ai-vault/wrapped-vault-key/recovery/v1", "utf-8");
 export const AAD_WRAPPED_VAULT_KEY_SESSION = Buffer.from("ai-vault/wrapped-vault-key/session/v1", "utf-8");
+export const AAD_WRAPPED_VAULT_KEY_PASSKEY = Buffer.from("ai-vault/wrapped-vault-key/passkey/v1", "utf-8");
 
 /**
  * Converts a 32-byte hex session token directly into a 32-byte AES-256 buffer key.

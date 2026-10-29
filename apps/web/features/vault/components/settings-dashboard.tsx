@@ -1,17 +1,33 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import Link from "next/link";
-import { SettingsDto, TokenTierDto, AiApiKeyMetadata } from "@ai-vault/types";
+import { Fingerprint, Trash2, Smartphone } from "lucide-react";
+import { SettingsDto, TokenTierDto, AiApiKeyMetadata, PasskeyDto } from "@ai-vault/types";
 import { updateSettingsAction } from "../actions/settings.action";
+import {
+  getPasskeyChallengeAction,
+  registerPasskeyAction,
+  removePasskeyAction,
+} from "../actions/passkey.action";
+import {
+  createWebAuthnPasskey,
+  getDefaultDeviceName,
+  isBiometricSupported,
+} from "@/shared/lib/webauthn-client";
 import { Button, Input, Card, ErrorAlert } from "@/shared/components";
 
 interface SettingsDashboardProps {
   initialSettings: SettingsDto;
   apiKeys: AiApiKeyMetadata[];
+  initialPasskeys?: PasskeyDto[];
 }
 
-export function SettingsDashboard({ initialSettings, apiKeys }: SettingsDashboardProps) {
+export function SettingsDashboard({
+  initialSettings,
+  apiKeys,
+  initialPasskeys = [],
+}: SettingsDashboardProps) {
   const [settings, setSettings] = useState<SettingsDto>(initialSettings);
   const [systemPrompt, setSystemPrompt] = useState(initialSettings.systemPrompt);
   const [maxCostPerRequest, setMaxCostPerRequest] = useState(initialSettings.maxCostPerRequest.toString());
@@ -20,10 +36,74 @@ export function SettingsDashboard({ initialSettings, apiKeys }: SettingsDashboar
   const [titlePrompt, setTitlePrompt] = useState(initialSettings.titlePrompt || "");
   const [titleApiKeyId, setTitleApiKeyId] = useState(initialSettings.titleApiKeyId || "");
   const [titleModelId, setTitleModelId] = useState(initialSettings.titleModelId || "");
-  
+
+  const [passkeys, setPasskeys] = useState<PasskeyDto[]>(initialPasskeys);
+  const [passkeyName, setPasskeyName] = useState("");
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    setPasskeyName(getDefaultDeviceName());
+    isBiometricSupported().then((supported) => setBiometricAvailable(supported));
+  }, []);
+
+  const handleRegisterPasskey = async () => {
+    setError(null);
+    setSuccess(null);
+    setPasskeyLoading(true);
+
+    try {
+      const challengeRes = await getPasskeyChallengeAction(false);
+      if (!challengeRes.success || !challengeRes.challenge) {
+        setError(challengeRes.error || "Failed to generate biometric challenge.");
+        setPasskeyLoading(false);
+        return;
+      }
+
+      const nameToUse = passkeyName.trim() || getDefaultDeviceName();
+      const webauthnResult = await createWebAuthnPasskey(challengeRes.challenge, nameToUse);
+
+      const res = await registerPasskeyAction({
+        name: nameToUse,
+        credentialId: webauthnResult.credentialId,
+        publicKeySpki: webauthnResult.publicKeySpki,
+        algorithm: webauthnResult.algorithm,
+        challenge: challengeRes.challenge,
+        clientDataJSON: webauthnResult.clientDataJSON,
+      });
+
+      if (!res.success || !res.passkey) {
+        setError(res.error || "Failed to register fingerprint passkey.");
+      } else {
+        setPasskeys([res.passkey, ...passkeys]);
+        setSuccess("Otisk prstu / Passkey byl úspěšně zaregistrován!");
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "NotAllowedError") {
+        setError("Registrace otisku prstu byla zrušena.");
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to register passkey.");
+      }
+    } finally {
+      setPasskeyLoading(false);
+    }
+  };
+
+  const handleRemovePasskey = async (id: string) => {
+    setError(null);
+    setSuccess(null);
+    const res = await removePasskeyAction(id);
+    if (!res.success) {
+      setError(res.error || "Failed to remove passkey.");
+    } else {
+      setPasskeys(passkeys.filter((p) => p.id !== id));
+      setSuccess("Passkey byl odebrán.");
+    }
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,6 +184,89 @@ export function SettingsDashboard({ initialSettings, apiKeys }: SettingsDashboar
           )}
 
           <Card className="p-6 sm:p-8 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Fingerprint className="w-5 h-5 text-indigo-400" />
+                  <h2 className="text-base font-medium text-neutral-100 font-sans">
+                    Přihlášení otiskem prstu (Passkey / Biometrie)
+                  </h2>
+                </div>
+                <p className="text-xs text-neutral-500 font-mono">
+                  Přihlašujte se na mobilu nebo počítači pomocí otisku prstu či Face ID místo zadávání hesla.
+                </p>
+              </div>
+            </div>
+
+            {biometricAvailable ? (
+              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
+                <div className="flex-1">
+                  <Input
+                    label="Název zařízení"
+                    type="text"
+                    value={passkeyName}
+                    onChange={(e) => setPasskeyName(e.target.value)}
+                    placeholder="např. Můj telefon"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleRegisterPasskey}
+                  isLoading={passkeyLoading}
+                  className="sm:w-auto px-5 h-10 flex items-center justify-center gap-2 border-indigo-500/30 bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-200"
+                >
+                  <Fingerprint className="w-4 h-4 text-indigo-400" />
+                  <span>+ Přidat otisk prstu</span>
+                </Button>
+              </div>
+            ) : (
+              <div className="p-3.5 rounded-xl border border-white/[0.06] bg-white/[0.02] text-neutral-400 text-xs font-mono">
+                Toto zařízení nebo prohlížeč nepodporuje biometrické ověřování (WebAuthn Passkeys).
+              </div>
+            )}
+
+            {passkeys.length > 0 && (
+              <div className="space-y-2.5 pt-2">
+                <div className="text-xs font-mono text-neutral-400">
+                  Registrovaná zařízení ({passkeys.length})
+                </div>
+                {passkeys.map((pk) => (
+                  <div
+                    key={pk.id}
+                    className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-[#181920]/70 border border-white/[0.06]"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
+                        <Smartphone className="w-4 h-4 text-indigo-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-neutral-200 truncate">
+                          {pk.name}
+                        </div>
+                        <div className="text-[11px] font-mono text-neutral-500">
+                          Přidáno {new Date(pk.createdAt).toLocaleDateString()}
+                          {pk.lastUsedAt
+                            ? ` · Naposledy použito ${new Date(pk.lastUsedAt).toLocaleDateString()}`
+                            : ""}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePasskey(pk.id)}
+                      className="p-2 rounded-lg text-neutral-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                      title="Odebrat passkey"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <Card className="p-6 sm:p-8 space-y-6">
             <div className="space-y-1">
               <h2 className="text-base font-medium text-neutral-100 font-sans">Global System Prompt</h2>
               <p className="text-xs text-neutral-500 font-mono">
@@ -141,7 +304,7 @@ export function SettingsDashboard({ initialSettings, apiKeys }: SettingsDashboar
                 </span>
               </label>
             </div>
-            
+
             {budgetControlEnabled ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
@@ -169,7 +332,7 @@ export function SettingsDashboard({ initialSettings, apiKeys }: SettingsDashboar
                 Configure AI for automatic chat title generation.
               </p>
             </div>
-            
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5 w-full">
                 <label className="text-[13px] font-medium text-neutral-300 font-sans">API Key</label>

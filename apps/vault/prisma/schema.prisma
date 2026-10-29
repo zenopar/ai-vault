@@ -212,3 +212,19 @@ model settings {
 
   @@schema("vault")
 }
+
+model passkeys {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  credential_id         String    @unique @db.VarChar(512)
+  name                  String    @db.VarChar(128)
+  public_key_spki       String
+  algorithm             Int       @default(-7)
+  kdf_salt              String    @db.VarChar(64)
+  wrapped_vault_key     String
+  wrapped_vault_key_iv  String    @db.VarChar(32)
+  wrapped_vault_key_tag String    @db.VarChar(32)
+  created_at            DateTime  @default(now()) @db.Timestamptz(6)
+  last_used_at          DateTime? @db.Timestamptz(6)
+
+  @@schema("vault")
+}

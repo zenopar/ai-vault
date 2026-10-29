@@ -1,4 +1,5 @@
 import { getVaultConfig } from "../db/repository/vault.repository.js";
+import { countPasskeyRecords } from "../db/repository/passkeys.repository.js";
 import { vaultState } from "./state.js";
 
 import { VaultOverallStatus } from "@ai-vault/types";
@@ -13,6 +14,7 @@ export interface VaultKdfParams {
 export interface VaultStatusResult {
   status: VaultOverallStatus;
   isUnlocked: boolean;
+  hasPasskeys?: boolean;
   version?: number;
   kdfParams?: VaultKdfParams;
   unlockedAt?: string | null;
@@ -34,14 +36,17 @@ export async function getVaultStatus(): Promise<VaultStatusResult> {
       return {
         status: "UNINITIALIZED",
         isUnlocked: false,
+        hasPasskeys: false,
       };
     }
 
     const isUnlocked = vaultState.isUnlocked();
+    const passkeyCount = await countPasskeyRecords().catch(() => 0);
 
     return {
       status: isUnlocked ? "UNLOCKED" : "LOCKED",
       isUnlocked,
+      hasPasskeys: passkeyCount > 0,
       version: config.version,
       kdfParams: {
         algorithm: config.kdf_algorithm,

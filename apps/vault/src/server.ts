@@ -30,6 +30,14 @@ import {
 } from "./vault/projects.js";
 import { getAnalyticsSummary } from "./vault/analytics/index.js";
 import { getSettings, updateSettings } from "./vault/settings.js";
+import {
+  createPasskeyChallenge,
+  listPasskeys,
+  registerPasskey,
+  removePasskey,
+  verifyPasskeyAndUnlock,
+  PasskeyNotFoundError,
+} from "./vault/passkeys.js";
 import { NoActiveApiKeyError, UnsupportedProviderError } from "./vault/ai/ai-provider.js";
 import { vaultState } from "./vault/state.js";
 import { authRateLimiter } from "./vault/rate-limiter.js";
@@ -52,6 +60,11 @@ import {
   ListChatFilesResponse,
   ListProjectsResponse,
   ProjectResponse,
+  PasskeyChallengeResponse,
+  RegisterPasskeyRequest,
+  RegisterPasskeyResponse,
+  ListPasskeysResponse,
+  VerifyPasskeyUnlockRequest,
 } from "@ai-vault/types";
 import { uploadFile, getFile, listChatFiles, FileNotFoundError } from "./vault/files/index.js";
 
@@ -155,7 +168,7 @@ function setSecurityHeaders(res: ServerResponse, origin: string): void {
   res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-vault-secret, x-session-token");
-  
+
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("X-XSS-Protection", "0");
@@ -300,6 +313,93 @@ export function createVaultHttpServer() {
         const result = await unlockVault(parsed.data.password);
         if (remoteIp) authRateLimiter.reset(remoteIp);
         sendJson<VaultUnlockResponse>(res, 200, result);
+        return;
+      }
+
+      // 6b. Passkey / WebAuthn Challenge
+      if (method === "GET" && pathname === "/passkeys/challenge") {
+        const includeCredentials = url.searchParams.get("login") === "true";
+        const challengeRes = await createPasskeyChallenge(includeCredentials);
+        sendJson<PasskeyChallengeResponse>(res, 200, challengeRes);
+        return;
+      }
+
+      // 6c. Unlock Vault via Passkey / Biometrics
+      if (method === "POST" && pathname === "/passkeys/unlock") {
+        if (remoteIp && authRateLimiter.isRateLimited(remoteIp)) {
+          sendJson(res, 429, { error: "Too many authentication attempts. Please try again later." });
+          return;
+        }
+
+        const schema = z.object({
+          credentialId: z.string().min(1),
+          authenticatorData: z.string().min(1),
+          clientDataJSON: z.string().min(1),
+          signature: z.string().min(1),
+        });
+        const parsed = schema.safeParse(await readJsonBody<VerifyPasskeyUnlockRequest>(req));
+        if (!parsed.success) {
+          sendJson(res, 400, { error: "Invalid WebAuthn assertion payload." });
+          return;
+        }
+
+        if (remoteIp) authRateLimiter.increment(remoteIp);
+        const result = await verifyPasskeyAndUnlock(parsed.data);
+        if (remoteIp) authRateLimiter.reset(remoteIp);
+        sendJson<VaultUnlockResponse>(res, 200, result);
+        return;
+      }
+
+      // 6d. List Passkeys (Requires active session)
+      if (method === "GET" && pathname === "/passkeys") {
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+        const passkeys = await listPasskeys();
+        sendJson<ListPasskeysResponse>(res, 200, { success: true, passkeys });
+        return;
+      }
+
+      // 6e. Register Passkey (Requires active session)
+      if (method === "POST" && pathname === "/passkeys") {
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+        const sessionToken = req.headers["x-session-token"] as string;
+        const schema = z.object({
+          name: z.string().min(1).max(128),
+          credentialId: z.string().min(1).max(512),
+          publicKeySpki: z.string().min(1),
+          algorithm: z.number().int(),
+          challenge: z.string().min(1),
+          clientDataJSON: z.string().min(1),
+        });
+        const parsed = schema.safeParse(await readJsonBody<RegisterPasskeyRequest>(req));
+        if (!parsed.success) {
+          sendJson(res, 400, { error: "Invalid passkey registration payload." });
+          return;
+        }
+
+        const passkey = await registerPasskey(parsed.data, sessionToken);
+        sendJson<RegisterPasskeyResponse>(res, 201, { success: true, passkey });
+        return;
+      }
+
+      // 6f. Remove Passkey (Requires active session)
+      if (method === "DELETE" && pathname.startsWith("/passkeys/")) {
+        if (!authenticateSessionToken(req)) {
+          sendJson(res, 401, { error: "Unauthorized: Invalid or missing session token." });
+          return;
+        }
+        const id = pathname.replace(/^\/passkeys\//, "").trim();
+        if (!id || !UUID_REGEX.test(id)) {
+          sendJson(res, 400, { error: "A valid Passkey ID (UUID) is required." });
+          return;
+        }
+        await removePasskey(id);
+        sendJson(res, 200, { success: true });
         return;
       }
 
@@ -932,7 +1032,7 @@ export function createVaultHttpServer() {
         return;
       }
 
-      if (err instanceof ApiKeyNotFoundError || err instanceof ChatNotFoundError || err instanceof ProjectNotFoundError) {
+      if (err instanceof ApiKeyNotFoundError || err instanceof ChatNotFoundError || err instanceof ProjectNotFoundError || err instanceof PasskeyNotFoundError) {
         sendJson(res, 404, { error: err.message });
         return;
       }

@@ -3,6 +3,7 @@ export type VaultOverallStatus = "UNINITIALIZED" | "LOCKED" | "UNLOCKED";
 export interface VaultStatusResponse {
   status: VaultOverallStatus;
   isUnlocked: boolean;
+  hasPasskeys?: boolean;
   version?: number;
   unlockedAt?: string | null;
   lastActivityAt?: string | null;
@@ -341,4 +342,49 @@ export interface UpdateSettingsResponse {
   success: boolean;
   settings?: SettingsDto;
   error?: string;
+}
+
+// === PASSKEY / WEBAUTHN TYPES ===
+
+export interface PasskeyDto {
+  id: string;
+  credentialId: string;
+  name: string;
+  createdAt: string;
+  lastUsedAt?: string | null;
+}
+
+export interface PasskeyChallengeResponse {
+  success: boolean;
+  challenge: string;
+  credentialIds?: string[];
+  error?: string;
+}
+
+export interface RegisterPasskeyRequest {
+  name: string;
+  credentialId: string;
+  publicKeySpki: string;
+  algorithm: number;
+  challenge: string;
+  clientDataJSON: string;
+}
+
+export interface RegisterPasskeyResponse {
+  success: boolean;
+  passkey?: PasskeyDto;
+  error?: string;
+}
+
+export interface ListPasskeysResponse {
+  success: boolean;
+  passkeys?: PasskeyDto[];
+  error?: string;
+}
+
+export interface VerifyPasskeyUnlockRequest {
+  credentialId: string;
+  authenticatorData: string;
+  clientDataJSON: string;
+  signature: string;
 }
